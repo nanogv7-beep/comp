@@ -1,0 +1,798 @@
+package comp;
+
+import java_cup.runtime.Symbol;
+import java.util.ArrayList;
+import java.util.List;
+
+/* ========================================================================== */
+/* CÓDIGO DEL PARSER                                                          */
+/* ========================================================================== */
+
+parser code {:
+    
+    // --- LISTAS DE ERRORES ---
+    private ArrayList<String> errores = new ArrayList<>();
+    public ArrayList<String> erroresSemanticos = new ArrayList<>(); // Para errores de semántica
+
+    // --- TABLA DE SÍMBOLOS (ANALIZADOR SEMÁNTICO) ---
+    public TablaSimbolos tablaSimbolos = new TablaSimbolos();
+
+    // --- GENERADOR DE CÓDIGO INTERMEDIO (C3D) ---
+    public GeneradorC3D genC3D = new GeneradorC3D();
+
+    // --- CLASE AUXILIAR PARA GUARDAR TIPO Y DIRECCIÓN (C3D) ---
+    public class NodoC3D {
+        public String tipo;
+        public String dir; 
+        
+        public NodoC3D(String tipo, String dir) {
+            this.tipo = tipo;
+            this.dir = dir;
+        }
+    }
+
+    public ArrayList<String> getErrores() {
+        return this.errores;
+    }
+
+    public ArrayList<String> getErroresSemanticos() {
+        return this.erroresSemanticos;
+    }
+
+    // --- 1. LISTA DE PALABRAS CLAVE (Para sugerencias) ---
+    private final String[] KEYWORDS = {
+        "mostrar", "leer", "definir", "tocar", "silencio", "romper", 
+        "continuar", "si_", "sino", "mientras", "repetir", "segun", 
+        "caso", "defecto", "nota", "acorde", "melodia", "secuencia", 
+        "lista", "tiempo", "octava", "compas", "tempo", "tono", "escala",
+        "seccion", "fin"
+    };
+
+    // --- 2. ALGORITMO DE DISTANCIA DE LEVENSHTEIN ---
+    public int calcularDistancia(String s1, String s2) {
+        int[][] dp = new int[s1.length() + 1][s2.length() + 1];
+
+        for (int i = 0; i <= s1.length(); i++) dp[i][0] = i;
+        for (int j = 0; j <= s2.length(); j++) dp[0][j] = j;
+
+        for (int i = 1; i <= s1.length(); i++) {
+            for (int j = 1; j <= s2.length(); j++) {
+                int cost = (s1.charAt(i - 1) == s2.charAt(j - 1)) ? 0 : 1;
+                dp[i][j] = Math.min(
+                    Math.min(dp[i - 1][j] + 1, dp[i][j - 1] + 1), 
+                    dp[i - 1][j - 1] + cost
+                );
+            }
+        }
+        return dp[s1.length()][s2.length()];
+    }
+
+    // --- 3. MÉTODO PARA BUSCAR SUGERENCIA ---
+    public String sugerirCorreccion(String lexemaMalEscrito) {
+        if (lexemaMalEscrito == null || lexemaMalEscrito.isEmpty()) return "";
+        
+        String mejorCandidato = null;
+        int menorDistancia = 3; 
+
+        for (String kw : KEYWORDS) {
+            int dist = calcularDistancia(lexemaMalEscrito.toLowerCase(), kw);
+            if (dist < menorDistancia) {
+                menorDistancia = dist;
+                mejorCandidato = kw;
+            }
+        }
+        
+        if (mejorCandidato != null) {
+            return " ¿Quisiste decir \"" + mejorCandidato + "\"?";
+        }
+        return "";
+    }
+
+    // --- REPORTE DE ERRORES DE CONTEXTO ---
+    public void report_context_error(String mensaje, Object info) {
+        int linea = 0;
+        int columna = 0;
+
+        if (info instanceof Symbol) {
+            Symbol s = (Symbol) info;
+            linea = s.left;
+            columna = s.right;
+        }
+
+        if (linea <= 0 && cur_token != null) {
+            linea = cur_token.left;
+            columna = cur_token.right;
+        }
+
+        if (linea > 0) {
+            errores.add("Error en Línea " + linea + ", Columna " + columna + ": " + mensaje);
+        } else {
+            errores.add("Error de Sintaxis: " + mensaje);
+        }
+    }
+
+    // --- REPORTE DE ERRORES SEMÁNTICOS ---
+    public void reportar_error_semantico(String mensaje, int linea, int columna) {
+        erroresSemanticos.add("Error Semántico en Línea " + linea + ", Columna " + columna + ": " + mensaje);
+    }
+
+    // --- TRADUCTOR DE TOKEN ---
+    private String simboloEnEspanol(int idSimbolo) {
+        switch (idSimbolo) {
+            case sym.Identificador: return "un identificador";
+            case sym.Numero:        return "un número entero";
+            case sym.NumeroDecimal: return "un número decimal";
+            case sym.CADENA:        return "una cadena de texto";
+            case sym.NOTE:          return "una nota musical (do, re, mi...)";
+            
+            case sym.PuntoComa:     return "un punto y coma ';'";
+            case sym.Coma:          return "una coma ','";
+            case sym.DosPuntos:     return "dos puntos ':'";
+            case sym.Igual:         return "signo igual '='";
+            case sym.LlaveAper:     return "llave de apertura '{'";
+            case sym.LlaveCierre:   return "llave de cierre '}'";
+            case sym.ParenAper:     return "paréntesis de apertura '('";
+            case sym.ParenCierre:   return "paréntesis de cierre ')'";
+            case sym.CorcheteAper:  return "corchete '['";
+            case sym.CorcheteCierre: return "corchete ']'";
+            
+            case sym.Suma: case sym.Resta: case sym.Multiplicacion: case sym.Division: 
+                return "un operador aritmético";
+            
+            case sym.KW_VECES:      return "palabra 'veces'";
+            case sym.KW_FIN:        return "palabra 'fin'";
+            case sym.KW_SECCION:    return "palabra 'seccion'";
+            case sym.KW_TRUE:       return "valor 'true'";
+            case sym.KW_FALSE:      return "valor 'false'";
+            case sym.KW_LEER:       return "palabra 'leer'";
+            
+            case sym.EOF:           return "fin de archivo";
+            case sym.error:         return "error";
+            
+            default: return "token desconocido (ID: " + idSimbolo + ")";
+        }
+    }
+
+    // --- LÓGICA MAESTRA DE ERRORES AUTOMÁTICOS ---
+    @Override
+    public void syntax_error(Symbol s) {
+        if (!errores.isEmpty()) {
+            String ultimo = errores.get(errores.size() - 1);
+            if (ultimo.contains("Línea " + s.left)) return;
+        }
+
+        String lexema = (s.value != null) ? s.value.toString() : "token desconocido";
+        int linea = (s.left > 0) ? s.left : (cur_token != null ? cur_token.left : 0);
+        int columna = (s.right > 0) ? s.right : (cur_token != null ? cur_token.right : 0);
+        
+        StringBuilder msg = new StringBuilder();
+        msg.append("Error en Línea ").append(linea).append(", Columna ").append(columna);
+        msg.append(": Se encontró \"").append(lexema).append("\"");
+
+        try {
+            List<Integer> esperados = expected_token_ids();
+            
+            if (s.sym == sym.Identificador) {
+                msg.append(sugerirCorreccion(lexema));
+            }
+
+            if (esperados.contains(sym.PuntoComa)) {
+                msg.append(", pero FALTA UN PUNTO Y COMA ';' antes de esto.");
+            } 
+            else if (esperados.contains(sym.DosPuntos)) {
+                msg.append(", pero FALTAN DOS PUNTOS ':' (ej: seccion: o caso 1:).");
+            }
+            else if (esperados.contains(sym.LlaveCierre)) {
+                msg.append(", pero falta cerrar un BLOQUE con LLAVE '}'.");
+            }
+            else if (esperados.contains(sym.ParenCierre)) {
+                msg.append(", pero falta cerrar un PARÉNTESIS ')'.");
+            }
+            else if (esperados.contains(sym.Igual) && s.sym == sym.ParenAper) {
+                msg.append(". Pareces llamar a una función, pero esa instrucción no existe o no es válida aquí.");
+            }
+            else if (!esperados.isEmpty()) {
+                msg.append(", pero se esperaba: ");
+                boolean primero = true;
+                int max = 0;
+                for (int id : esperados) {
+                    if (id == sym.error) continue;
+                    if (max++ > 4) break; 
+                    if (!primero) msg.append(" o ");
+                    msg.append(simboloEnEspanol(id));
+                    primero = false;
+                }
+            } else {
+                msg.append(" en una posición inválida.");
+            }
+        } catch (Exception e) {
+            msg.append(".");
+        }
+        errores.add(msg.toString());
+    }
+
+    @Override
+    public void unrecovered_syntax_error(Symbol s) throws java.lang.Exception {
+        if (errores.isEmpty()) {
+            errores.add("Error Fatal: Estructura incompleta. Revise si faltan llaves '}' o la instrucción 'fin'.");
+        }
+    }
+:}
+
+/* ========================================================================== */
+/* TERMINALES                                                                 */
+/* ========================================================================== */
+
+terminal CADENA, NOTE, Identificador, Numero, NumeroDecimal;
+terminal Igual, Coma, PuntoComa, DosPuntos;
+terminal LlaveAper, LlaveCierre, ParenAper, ParenCierre, CorcheteAper, CorcheteCierre;
+terminal Suma, Resta, Multiplicacion, Division, Modulo;
+terminal opAnd, opOr, opNot;
+terminal opRel_ig, opRel_dif, opRel_menIgual, opRel_mayIgual, opRel_men, opRel_may;
+
+terminal KW_SECCION, KW_FIN, KW_MOSTRAR, KW_LEER, KW_DEFINIR;
+terminal KW_SI, KW_SINO, KW_SEGUN, KW_CASO, KW_DEFECTO;
+terminal KW_REPETIR, KW_VECES, KW_MIENTRAS, KW_ROMPER, KW_CONTINUAR;
+terminal KW_TOCAR, KW_SILENCIO;
+
+terminal KW_NOTA, KW_ACORDE, KW_MELODIA, KW_SECUENCIA, KW_LISTA;
+terminal KW_TIEMPO, KW_OCTAVA, KW_COMPAS, KW_TEMPO, KW_TONO, KW_ESCALA;
+terminal KW_MAYOR, KW_MENOR, KW_ADAGIO, KW_ANDANTE, KW_ALLEGRO;
+terminal KW_TRUE, KW_FALSE;
+
+/* ========================================================================== */
+/* NO TERMINALES                                                              */
+/* ========================================================================== */
+
+non terminal INICIO, SENTENCIA, DECLARACION, INSTRUCCION;
+non terminal lista_sentencias, bloque;
+non terminal if_sentencia, while_sentencia, repetir_sentencia;
+non terminal segun_sentencia, casos_segun, caso, defecto_opcional;
+non terminal lista_elementos, elementos, velocidad;
+
+/* NODOS C3D Y TIPOS: ¡AQUÍ ESTÁ LA CORRECCIÓN DE LOS TIPOS! */
+non terminal NodoC3D expresion, termino, factor;
+non terminal NodoC3D expresion_logica, expresion_and, expresion_not, expresion_relacional, expresion_aritmetica;
+non terminal NodoC3D declaracion_musical, definicion_nota, definicion_tiempo;
+
+/* NUEVOS NODOS: PARA FILTRAR NOTAS, ACORDES Y MELODIAS */
+non terminal NodoC3D elemento_nota, notas_acorde, notas_melodia;
+
+/* Precedencia */
+precedence nonassoc KW_SI;
+precedence nonassoc KW_SINO;
+
+/* ========================================================================== */
+/* GRAMÁTICA                                                                  */
+/* ========================================================================== */
+
+start with INICIO;
+
+// INICIO
+INICIO ::= 
+      KW_SECCION DosPuntos Identificador bloque KW_FIN
+    | KW_SECCION DosPuntos Identificador bloque error:s
+      {: parser.report_context_error("Falta la palabra clave 'fin' al final del archivo.", s); :}
+    | KW_SECCION error:s Identificador bloque KW_FIN
+      {: parser.report_context_error("Faltan los DOS PUNTOS ':' después de 'seccion'.", s); :}
+    ;
+
+bloque ::= LlaveAper lista_sentencias LlaveCierre;
+
+lista_sentencias ::= 
+      /* vacio */
+    | lista_sentencias INSTRUCCION
+    ;
+
+// INSTRUCCION
+INSTRUCCION ::= DECLARACION | SENTENCIA | error PuntoComa;
+
+DECLARACION ::= 
+      // 1. DEFINICIÓN DE VARIABLES
+      KW_DEFINIR Identificador:id Igual expresion:e PuntoComa  
+      {: 
+          String nombreVar = id.toString();
+          int linea = (idleft > 0) ? idleft : 0;
+          int col = (idright > 0) ? idright : 0;
+          String tipoDato = (e != null) ? e.tipo : "desconocido";
+
+          boolean insertado = parser.tablaSimbolos.insertar(nombreVar, tipoDato, linea, col);
+          if (!insertado) {
+              parser.reportar_error_semantico("La variable '" + nombreVar + "' ya fue declarada previamente.", linea, col);
+          } else if (e != null && !e.tipo.equals("error")) {
+              parser.genC3D.agregar("=", e.dir, "", nombreVar);
+          }
+      :}
+    | KW_DEFINIR Identificador Igual expresion error:s
+      {: parser.report_context_error("Falta PUNTO Y COMA ';' al final de la definición.", s); :}
+    | KW_DEFINIR error:s
+      {: parser.report_context_error("Declaración inválida. Use: definir nombre = valor;", s); :}
+
+      // 2. MOSTRAR
+    | KW_MOSTRAR ParenAper expresion:e ParenCierre PuntoComa
+      {: 
+          if(e != null && !e.tipo.equals("error")) {
+              parser.genC3D.agregar("MOSTRAR", e.dir, "", "");
+          }
+      :}
+    | KW_MOSTRAR error PuntoComa:s
+      {: parser.report_context_error("Error en 'mostrar'. Use: mostrar(\"texto\");", s); :}
+      
+      // 3. LEER 
+    | KW_LEER ParenAper expresion ParenCierre PuntoComa
+    | KW_LEER error PuntoComa:s
+      {: parser.report_context_error("Error en 'leer'. Use: leer(\"Mensaje\");", s); :}
+    
+      // 4. TOCAR
+    | KW_TOCAR ParenAper expresion:e ParenCierre PuntoComa
+      {:
+          if(e != null && !e.tipo.equals("error")) {
+              parser.genC3D.agregar("TOCAR", e.dir, "", "");
+          }
+      :}
+    | KW_TOCAR error PuntoComa:s
+      {: parser.report_context_error("Error en 'tocar'. Use: tocar(nota);", s); :}
+
+      // 5. SILENCIO, ROMPER, CONTINUAR
+    | KW_SILENCIO PuntoComa
+      {: parser.genC3D.agregar("SILENCIO", "", "", ""); :}
+    | KW_ROMPER PuntoComa
+      {: parser.genC3D.agregar("ROMPER", "", "", ""); :}
+    | KW_CONTINUAR PuntoComa
+      {: parser.genC3D.agregar("CONTINUAR", "", "", ""); :}
+
+      // 6. ASIGNACIÓN
+    | Identificador:id Igual expresion:e PuntoComa
+      {:
+          String nombreVar = id.toString();
+          int linea = (idleft > 0) ? idleft : 0;
+          int col = (idright > 0) ? idright : 0;
+          String tipoAsignado = (e != null) ? e.tipo : "desconocido";
+          
+          if (!parser.tablaSimbolos.existe(nombreVar)) {
+              parser.reportar_error_semantico("No se puede asignar a '" + nombreVar + "' porque no ha sido definida. Use 'definir' primero.", linea, col);
+          } else {
+              String tipoGuardado = parser.tablaSimbolos.buscar(nombreVar).tipoDato;
+              if (!tipoGuardado.equals("desconocido") && !tipoAsignado.equals("error") && !tipoGuardado.equals(tipoAsignado)) {
+                  if (!(tipoGuardado.equals("decimal") && tipoAsignado.equals("entero"))) {
+                      parser.reportar_error_semantico("Incompatibilidad de tipos: '" + nombreVar + "' es de tipo '" + tipoGuardado + "', no puedes asignarle un '" + tipoAsignado + "'.", linea, col);
+                  } else {
+                      parser.genC3D.agregar("=", e.dir, "", nombreVar);
+                  }
+              } else if (!tipoAsignado.equals("error")) {
+                  parser.genC3D.agregar("=", e.dir, "", nombreVar);
+              }
+          }
+      :}
+    | Identificador Igual expresion error:s
+      {: parser.report_context_error("Falta PUNTO Y COMA ';' al final de la asignación.", s); :}
+
+      // 7. FUNCION DESCONOCIDA
+    | Identificador:id ParenAper error:s
+      {: 
+         String lexema = id.toString();
+         String sugerencia = parser.sugerirCorreccion(lexema);
+         if (!sugerencia.isEmpty()) {
+             parser.report_context_error("Instrucción \"" + lexema + "\" no reconocida." + sugerencia, id);
+         } else {
+             parser.report_context_error("Instrucción \"" + lexema + "\" desconocida. Si es una función, asegúrese de que existe.", id);
+         }
+      :}
+      
+      // 8. TYPO INICIO
+    | Identificador:id1 Identificador:id2 error:s
+      {: 
+         String lexema = id1.toString();
+         String sugerencia = parser.sugerirCorreccion(lexema);
+         if (!sugerencia.isEmpty()) {
+             parser.report_context_error("Palabra desconocida al inicio: \"" + lexema + "\"." + sugerencia, id1);
+         } else {
+             parser.report_context_error("Sintaxis incorrecta: No se esperan dos identificadores seguidos (\"" + lexema + " " + id2 + "\").", id1);
+         }
+      :}
+
+      // 9. ESTRUCTURAS MUSICALES
+    | declaracion_musical PuntoComa
+    | declaracion_musical error:s
+      {: parser.report_context_error("Falta PUNTO Y COMA ';' al final de la instrucción musical.", s); :}
+    ;
+
+SENTENCIA ::= 
+      if_sentencia
+    | while_sentencia
+    | repetir_sentencia
+    | segun_sentencia
+    | bloque 
+    ;
+
+/* --- TRAMPAS PARA ESTRUCTURAS DE CONTROL --- */
+
+if_sentencia ::= 
+      KW_SI ParenAper expresion ParenCierre bloque
+    | KW_SI ParenAper expresion ParenCierre bloque KW_SINO bloque
+    | KW_SI ParenAper error ParenCierre bloque:s
+      {: parser.report_context_error("Condición del 'si_' inválida. Revise la lógica.", s); :}
+    | KW_SI error bloque:s 
+      {: parser.report_context_error("Estructura 'si_' mal formada. ¿Faltan los paréntesis ( )?", s); :}
+    ;
+
+while_sentencia ::= 
+      KW_MIENTRAS ParenAper expresion ParenCierre bloque
+    | KW_MIENTRAS ParenAper error ParenCierre bloque:s
+      {: parser.report_context_error("Condición del 'mientras' inválida.", s); :}
+    | KW_MIENTRAS error bloque:s
+      {: parser.report_context_error("Estructura 'mientras' inválida. ¿Faltan paréntesis?", s); :}
+    ;
+
+repetir_sentencia ::= 
+      KW_REPETIR expresion KW_VECES bloque
+    | KW_REPETIR expresion error bloque:s
+      {: parser.report_context_error("Falta la palabra clave 'veces' en el ciclo.", s); :}
+    | KW_REPETIR error KW_VECES bloque:s
+      {: parser.report_context_error("Cantidad de repeticiones inválida.", s); :}
+    ;
+
+segun_sentencia ::= 
+      KW_SEGUN ParenAper expresion ParenCierre LlaveAper casos_segun LlaveCierre
+    | KW_SEGUN error LlaveAper casos_segun LlaveCierre:s
+      {: parser.report_context_error("Estructura 'segun' inválida. Use: segun(var) { ... }", s); :}
+    ;
+
+casos_segun ::= caso | casos_segun caso | casos_segun defecto_opcional | defecto_opcional;
+
+caso ::= 
+      KW_CASO expresion DosPuntos bloque
+    | KW_CASO expresion error bloque:s
+      {: parser.report_context_error("Faltan DOS PUNTOS ':' después del valor del 'caso'.", s); :}
+    ;
+
+defecto_opcional ::= KW_DEFECTO DosPuntos bloque;
+
+/* ========================================================================== */
+/* ESTRUCTURAS MUSICALES ESTRICTAS (NOTAS, ACORDES Y MELODIAS)                */
+/* ========================================================================== */
+
+// Aseguramos que solo pasen 'notas' literales o variables tipo 'nota'
+elemento_nota ::= 
+      definicion_nota:dn {: RESULT = dn; :}
+    | Identificador:id
+      {:
+          String nombreVar = id.toString();
+          if (!parser.tablaSimbolos.existe(nombreVar)) {
+              parser.reportar_error_semantico("La variable '" + nombreVar + "' no ha sido declarada.", idleft, idright);
+              RESULT = new NodoC3D("error", nombreVar);
+          } else {
+              String tipoGuardado = parser.tablaSimbolos.buscar(nombreVar).tipoDato;
+              if (!tipoGuardado.equals("nota")) {
+                  parser.reportar_error_semantico("Se esperaba una 'nota', pero '" + nombreVar + "' es de tipo '" + tipoGuardado + "'.", idleft, idright);
+                  RESULT = new NodoC3D("error", nombreVar);
+              } else {
+                  RESULT = new NodoC3D("nota", nombreVar);
+              }
+          }
+      :}
+    ;
+
+// ACORDE: Exige una coma en medio (mínimo 2 notas)
+notas_acorde ::= 
+      elemento_nota Coma elemento_nota {: RESULT = new NodoC3D("acorde_elems", ""); :}
+    | notas_acorde Coma elemento_nota {: RESULT = new NodoC3D("acorde_elems", ""); :}
+    ;
+
+// MELODIA Y SECUENCIA: Puede tener 1, varias o estar vacía, pero DEBEN ser notas
+notas_melodia ::= 
+      elemento_nota {: RESULT = new NodoC3D("melodia_elems", ""); :}
+    | notas_melodia Coma elemento_nota {: RESULT = new NodoC3D("melodia_elems", ""); :}
+    | /* vacio */ {: RESULT = new NodoC3D("melodia_elems", ""); :}
+    ;
+
+
+declaracion_musical ::=
+      KW_TEMPO velocidad {: RESULT = new NodoC3D("tempo", ""); :}
+      
+    // ACORDE (Valida paréntesis, GUARDA EN MEMORIA y exige 'notas_acorde' min 2)
+    | KW_ACORDE Identificador:id ParenAper notas_acorde ParenCierre
+      {: 
+          String nombre = id.toString();
+          int linea = (idleft > 0) ? idleft : 0;
+          int col = (idright > 0) ? idright : 0;
+          if (!parser.tablaSimbolos.insertar(nombre, "acorde", linea, col)) {
+              parser.reportar_error_semantico("El identificador '" + nombre + "' ya está en uso.", linea, col);
+          }
+          RESULT = new NodoC3D("acorde", nombre);
+      :}
+    // Trampa específica si el usuario pone una sola nota en el acorde
+    | KW_ACORDE Identificador ParenAper elemento_nota ParenCierre:s
+      {: parser.report_context_error("Un acorde debe contener mínimo 2 notas separadas por coma.", s); RESULT = new NodoC3D("error", ""); :}
+    | KW_ACORDE Identificador ParenAper ParenCierre:s
+      {: parser.report_context_error("Un acorde no puede estar vacío (mínimo 2 notas).", s); RESULT = new NodoC3D("error", ""); :}
+    | KW_ACORDE Identificador error:s
+      {: parser.report_context_error("Declaración de 'acorde' inválida. Use paréntesis ( ).", s); RESULT = new NodoC3D("error", ""); :}
+      
+    // ESCALA
+    | KW_ESCALA Identificador:id ParenAper elementos ParenCierre
+      {: 
+          String nombre = id.toString();
+          int linea = (idleft > 0) ? idleft : 0;
+          int col = (idright > 0) ? idright : 0;
+          if (!parser.tablaSimbolos.insertar(nombre, "escala", linea, col)) {
+              parser.reportar_error_semantico("El identificador '" + nombre + "' ya está en uso.", linea, col);
+          }
+          RESULT = new NodoC3D("escala", nombre);
+      :}
+    | KW_ESCALA Identificador error:s
+      {: parser.report_context_error("Declaración de 'escala' inválida. Use paréntesis ( ).", s); RESULT = new NodoC3D("error", ""); :}
+      
+    // SECUENCIA (GUARDA EN MEMORIA y exige notas_melodia)
+    | KW_SECUENCIA Identificador:id LlaveAper notas_melodia LlaveCierre
+      {: 
+          String nombre = id.toString();
+          int linea = (idleft > 0) ? idleft : 0;
+          int col = (idright > 0) ? idright : 0;
+          if (!parser.tablaSimbolos.insertar(nombre, "secuencia", linea, col)) {
+              parser.reportar_error_semantico("El identificador '" + nombre + "' ya está en uso.", linea, col);
+          }
+          RESULT = new NodoC3D("secuencia", nombre);
+      :}
+    | KW_SECUENCIA Identificador error:s
+      {: parser.report_context_error("Declaración de 'secuencia' inválida. Use llaves { }.", s); RESULT = new NodoC3D("error", ""); :}
+      
+    // MELODIA (GUARDA EN MEMORIA y exige notas_melodia)
+    | KW_MELODIA Identificador:id LlaveAper notas_melodia LlaveCierre
+      {: 
+          String nombre = id.toString();
+          int linea = (idleft > 0) ? idleft : 0;
+          int col = (idright > 0) ? idright : 0;
+          if (!parser.tablaSimbolos.insertar(nombre, "melodia", linea, col)) {
+              parser.reportar_error_semantico("El identificador '" + nombre + "' ya está en uso.", linea, col);
+          }
+          RESULT = new NodoC3D("melodia", nombre);
+      :}
+    | KW_MELODIA Identificador error:s
+      {: parser.report_context_error("Declaración de 'melodia' inválida. Use llaves { }.", s); RESULT = new NodoC3D("error", ""); :}
+      
+    | KW_COMPAS Numero Division Numero {: RESULT = new NodoC3D("compas", ""); :}
+    | KW_COMPAS Numero error:s
+      {: parser.report_context_error("Formato de compás incorrecto. Use barra '/'. Ejemplo: 4/4", s); RESULT = new NodoC3D("error", ""); :}
+      
+    // LISTA 
+    | KW_LISTA Identificador:id Igual lista_elementos
+      {: 
+          String nombre = id.toString();
+          int linea = (idleft > 0) ? idleft : 0;
+          int col = (idright > 0) ? idright : 0;
+          if (!parser.tablaSimbolos.insertar(nombre, "lista", linea, col)) {
+              parser.reportar_error_semantico("El identificador '" + nombre + "' ya está en uso.", linea, col);
+          }
+          RESULT = new NodoC3D("lista", nombre);
+      :}
+    | KW_LISTA Identificador Igual error:s
+      {: parser.report_context_error("Lista inválida. Debe usar corchetes [ ... ].", s); RESULT = new NodoC3D("error", ""); :}
+    ;
+
+/* --- EXPRESIONES Y VALORES CON VALIDACIÓN DE TIPOS Y GENERACIÓN C3D --- */
+
+lista_elementos ::= CorcheteAper elementos CorcheteCierre {: RESULT = new NodoC3D("lista", "lista_obj"); :};
+elementos ::= expresion | elementos Coma expresion | /* vacio */ ;
+
+expresion ::= expresion_logica:e {: RESULT = e; :};
+
+expresion_logica ::= 
+      expresion_logica:e1 opOr expresion_and:e2 
+      {: 
+          String temp = parser.genC3D.nuevoTemporal();
+          parser.genC3D.agregar("OR", e1.dir, e2.dir, temp);
+          RESULT = new NodoC3D("booleano", temp); 
+      :}
+    | expresion_and:e {: RESULT = e; :}
+    ;
+
+expresion_and ::= 
+      expresion_and:e1 opAnd expresion_not:e2 
+      {: 
+          String temp = parser.genC3D.nuevoTemporal();
+          parser.genC3D.agregar("AND", e1.dir, e2.dir, temp);
+          RESULT = new NodoC3D("booleano", temp); 
+      :}
+    | expresion_not:e {: RESULT = e; :}
+    ;
+
+expresion_not ::= 
+      opNot expresion_relacional:e1 
+      {: 
+          String temp = parser.genC3D.nuevoTemporal();
+          parser.genC3D.agregar("NOT", e1.dir, "", temp);
+          RESULT = new NodoC3D("booleano", temp); 
+      :}
+    | expresion_relacional:e {: RESULT = e; :}
+    ;
+
+expresion_relacional ::= 
+      expresion_aritmetica:e1 opRel_ig expresion_aritmetica:e2 
+      {: 
+          String temp = parser.genC3D.nuevoTemporal();
+          parser.genC3D.agregar("==", e1.dir, e2.dir, temp);
+          RESULT = new NodoC3D("booleano", temp); 
+      :}
+    | expresion_aritmetica:e1 opRel_dif expresion_aritmetica:e2 
+      {: 
+          String temp = parser.genC3D.nuevoTemporal();
+          parser.genC3D.agregar("!=", e1.dir, e2.dir, temp);
+          RESULT = new NodoC3D("booleano", temp); 
+      :}
+    | expresion_aritmetica:e1 opRel_men expresion_aritmetica:e2 
+      {: 
+          String temp = parser.genC3D.nuevoTemporal();
+          parser.genC3D.agregar("<", e1.dir, e2.dir, temp);
+          RESULT = new NodoC3D("booleano", temp); 
+      :}
+    | expresion_aritmetica:e1 opRel_may expresion_aritmetica:e2 
+      {: 
+          String temp = parser.genC3D.nuevoTemporal();
+          parser.genC3D.agregar(">", e1.dir, e2.dir, temp);
+          RESULT = new NodoC3D("booleano", temp); 
+      :}
+    | expresion_aritmetica:e1 opRel_menIgual expresion_aritmetica:e2 
+      {: 
+          String temp = parser.genC3D.nuevoTemporal();
+          parser.genC3D.agregar("<=", e1.dir, e2.dir, temp);
+          RESULT = new NodoC3D("booleano", temp); 
+      :}
+    | expresion_aritmetica:e1 opRel_mayIgual expresion_aritmetica:e2 
+      {: 
+          String temp = parser.genC3D.nuevoTemporal();
+          parser.genC3D.agregar(">=", e1.dir, e2.dir, temp);
+          RESULT = new NodoC3D("booleano", temp); 
+      :}
+    | expresion_aritmetica:e {: RESULT = e; :}
+    ;
+
+expresion_aritmetica ::= 
+      expresion_aritmetica:e1 Suma termino:e2
+      {:
+          if (e1.tipo.equals("cadena") || e2.tipo.equals("cadena")) {
+              String temp = parser.genC3D.nuevoTemporal();
+              parser.genC3D.agregar("+", e1.dir, e2.dir, temp);
+              RESULT = new NodoC3D("cadena", temp);
+          } else if ((e1.tipo.equals("entero") || e1.tipo.equals("decimal")) && (e2.tipo.equals("entero") || e2.tipo.equals("decimal"))) {
+              String tipoRes = (e1.tipo.equals("decimal") || e2.tipo.equals("decimal")) ? "decimal" : "entero";
+              String temp = parser.genC3D.nuevoTemporal();
+              parser.genC3D.agregar("+", e1.dir, e2.dir, temp);
+              RESULT = new NodoC3D(tipoRes, temp);
+          } else {
+              parser.reportar_error_semantico("Operación inválida: No puedes sumar un '" + e1.tipo + "' con un '" + e2.tipo + "'.", e1left, e1right);
+              RESULT = new NodoC3D("error", "error");
+          }
+      :}
+    | expresion_aritmetica:e1 Resta termino:e2
+      {:
+          if ((e1.tipo.equals("entero") || e1.tipo.equals("decimal")) && (e2.tipo.equals("entero") || e2.tipo.equals("decimal"))) {
+              String tipoRes = (e1.tipo.equals("decimal") || e2.tipo.equals("decimal")) ? "decimal" : "entero";
+              String temp = parser.genC3D.nuevoTemporal();
+              parser.genC3D.agregar("-", e1.dir, e2.dir, temp);
+              RESULT = new NodoC3D(tipoRes, temp);
+          } else {
+              parser.reportar_error_semantico("Operación inválida: No puedes restar un '" + e1.tipo + "' con un '" + e2.tipo + "'.", e1left, e1right);
+              RESULT = new NodoC3D("error", "error");
+          }
+      :}
+    | termino:t {: RESULT = t; :}
+    ;
+
+termino ::= 
+      termino:t1 Multiplicacion factor:f1
+      {:
+          if ((t1.tipo.equals("entero") || t1.tipo.equals("decimal")) && (f1.tipo.equals("entero") || f1.tipo.equals("decimal"))) {
+              String tipoRes = (t1.tipo.equals("decimal") || f1.tipo.equals("decimal")) ? "decimal" : "entero";
+              String temp = parser.genC3D.nuevoTemporal();
+              parser.genC3D.agregar("*", t1.dir, f1.dir, temp);
+              RESULT = new NodoC3D(tipoRes, temp);
+          } else {
+              parser.reportar_error_semantico("Operación inválida: No puedes multiplicar un '" + t1.tipo + "' con un '" + f1.tipo + "'.", t1left, t1right);
+              RESULT = new NodoC3D("error", "error");
+          }
+      :}
+    | termino:t1 Division factor:f1
+      {:
+          if ((t1.tipo.equals("entero") || t1.tipo.equals("decimal")) && (f1.tipo.equals("entero") || f1.tipo.equals("decimal"))) {
+              String temp = parser.genC3D.nuevoTemporal();
+              parser.genC3D.agregar("/", t1.dir, f1.dir, temp);
+              RESULT = new NodoC3D("decimal", temp); 
+          } else {
+              parser.reportar_error_semantico("Operación inválida: No puedes dividir un '" + t1.tipo + "' entre un '" + f1.tipo + "'.", t1left, t1right);
+              RESULT = new NodoC3D("error", "error");
+          }
+      :}
+    | termino:t1 Modulo factor:f1
+      {:
+          if (t1.tipo.equals("entero") && f1.tipo.equals("entero")) {
+              String temp = parser.genC3D.nuevoTemporal();
+              parser.genC3D.agregar("%", t1.dir, f1.dir, temp);
+              RESULT = new NodoC3D("entero", temp);
+          } else {
+              parser.reportar_error_semantico("El modulo solo acepta 'entero' y 'entero' (recibiste: " + t1.tipo + " y " + f1.tipo + ").", t1left, t1right);
+              RESULT = new NodoC3D("error", "error");
+          }
+      :}
+    | factor:f {: RESULT = f; :}
+    ;
+
+factor ::= 
+      Numero:n {: RESULT = new NodoC3D("entero", n.toString()); :} 
+    | NumeroDecimal:nd {: RESULT = new NodoC3D("decimal", nd.toString()); :} 
+    | CADENA:c {: RESULT = new NodoC3D("cadena", c.toString()); :} 
+    
+    | Identificador:id
+      {:
+          String nombreVar = id.toString();
+          if (!parser.tablaSimbolos.existe(nombreVar)) {
+              parser.reportar_error_semantico("La variable '" + nombreVar + "' no ha sido declarada.", idleft, idright);
+              RESULT = new NodoC3D("error", nombreVar);
+          } else {
+              String tipoGuardado = parser.tablaSimbolos.buscar(nombreVar).tipoDato;
+              RESULT = new NodoC3D(tipoGuardado, nombreVar);
+          }
+      :}
+    | NOTE:n {: RESULT = new NodoC3D("nota", n.toString()); :}                   
+    | KW_TRUE {: RESULT = new NodoC3D("booleano", "true"); :} 
+    | KW_FALSE {: RESULT = new NodoC3D("booleano", "false"); :} 
+    | lista_elementos {: RESULT = new NodoC3D("lista", "lista_obj"); :}        
+    | ParenAper expresion:e ParenCierre {: RESULT = e; :}
+    
+    | KW_LEER ParenAper expresion:e ParenCierre 
+      {: 
+          String temp = parser.genC3D.nuevoTemporal();
+          parser.genC3D.agregar("LEER", e.dir, "", temp); 
+          RESULT = new NodoC3D("cadena", temp); 
+      :}
+    
+    | ParenAper ParenCierre:s 
+      {: parser.report_context_error("Expresión vacía entre paréntesis '()'.", s); RESULT = new NodoC3D("error", "error"); :}
+    | ParenAper expresion error:s 
+      {: parser.report_context_error("Falta cerrar paréntesis ')' en la expresión.", s); RESULT = new NodoC3D("error", "error"); :}
+
+    | KW_MAYOR {: RESULT = new NodoC3D("escala", "mayor"); :} 
+    | KW_MENOR {: RESULT = new NodoC3D("escala", "menor"); :} 
+    | KW_ADAGIO {: RESULT = new NodoC3D("velocidad", "adagio"); :} 
+    | KW_ANDANTE {: RESULT = new NodoC3D("velocidad", "andante"); :} 
+    | KW_ALLEGRO {: RESULT = new NodoC3D("velocidad", "allegro"); :} 
+    | KW_TONO {: RESULT = new NodoC3D("tono", "tono"); :}
+    | definicion_nota:dn {: RESULT = dn; :}
+    | definicion_tiempo:dt {: RESULT = dt; :}
+    | KW_SILENCIO {: RESULT = new NodoC3D("silencio", "silencio"); :}
+    ;
+
+velocidad ::= 
+      KW_ADAGIO 
+    | KW_ANDANTE 
+    | KW_ALLEGRO
+    | Numero
+    ;
+
+/* --- REGLAS CON VALIDACIÓN DE OCTAVA (0-8) --- */
+definicion_nota ::= 
+      KW_NOTA NOTE:n KW_OCTAVA Numero:oct
+      {:
+          int octava = Integer.parseInt(oct.toString());
+          if (octava < 0 || octava > 8) {
+              parser.reportar_error_semantico("La octava debe estar entre 0 y 8 (se encontró: " + octava + ").", nleft, nright);
+          }
+          RESULT = new NodoC3D("nota", "nota_def");
+      :}
+    | KW_NOTA NOTE:n
+      {: RESULT = new NodoC3D("nota", "nota_def"); :}
+    | KW_NOTA NOTE:n KW_OCTAVA Numero:oct KW_TIEMPO Numero Division Numero
+      {:
+          int octava = Integer.parseInt(oct.toString());
+          if (octava < 0 || octava > 8) {
+              parser.reportar_error_semantico("La octava debe estar entre 0 y 8 (se encontró: " + octava + ").", nleft, nright);
+          }
+          RESULT = new NodoC3D("nota", "nota_def");
+      :}
+    | KW_NOTA NOTE:n KW_TIEMPO Numero Division Numero
+      {: RESULT = new NodoC3D("nota", "nota_def"); :}
+    ;
+
+definicion_tiempo ::=
+      KW_TIEMPO Numero Division Numero {: RESULT = new NodoC3D("tiempo", "tiempo_def"); :}
+    ;
