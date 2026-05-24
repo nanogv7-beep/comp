@@ -1,32 +1,43 @@
-seccion: PruebaTotal {
+seccion: PruebaFinal {
 
-    // Ejemplo codigo intermedio
-    definir x = 4;
-    definir y = 5;
-    definir z = x * y + 2; 
+    // --- 1. PRUEBA DE OPTIMIZACIÓN: Plegamiento de Constantes ---
+    // El C3D original hará la multiplicación y suma. 
+    // El C3D Optimizado lo convertirá directo en: x = 50, y = 52
+    definir x = 10 * 5;
+    definir y = x + 2;
 
-    mostrar("Iniciando prueba maestra del compilador");
-    definir usuario = leer("Presiona Enter para continuar...");
+    // --- 2. PRUEBA DE OPTIMIZACIÓN: Simplificación Algebraica ---
+    // El C3D Optimizado eliminará los ceros y unos innecesarios.
+    definir redundante = y * 1;
+    definir tonto = y + 0;
+    definir anulado = y * 0;
 
+    // --- 3. PRUEBA DE SEMÁNTICA MUSICAL ESTRICTA ---
+    // Octavas válidas (0-8) y asignación correcta de tipos
     definir n1 = nota do octava 4;
     definir n2 = nota mi octava 5;
-    definir n3 = nota sol octava 4;
+    definir n3 = nota sol;
 
-    acorde MiAcorde (n1, n2, n3);
+    // --- 4. PRUEBA DE ACORDES Y MELODÍAS ---
+    // Acorde exige mínimo 2 notas separadas por coma
+    acorde AcordeFinal (n1, n2, n3);
     
-    melodia MiMelodia { n1, n2, nota la octava 4 };
+    // Melodía solo acepta notas
+    melodia MelodiaFinal { n1, n2, nota la octava 4 };
 
-    // --- 5. PRUEBA DE CONTROL DE FLUJO ---
-    // El C3D generará operadores relacionales.
-    si_ (z > 20) {
+    // --- 5. PRUEBA DE INTERFAZ Y CONTROL DE FLUJO ---
+    mostrar("Generando Cuadruplos Optimizados...");
+    definir usuario = leer("Presiona Enter para escuchar:");
+
+    si_ (x > 40) {
         
-        mostrar("Las matematicas y el semantico funcionan perfecto.");
-        tocar(MiAcorde);
-        
-        repetir x veces {
-            tocar(MiMelodia);
+        repetir 2 veces {
+            tocar(MelodiaFinal);
             silencio;
         }
+        
+        tocar(AcordeFinal);
+        mostrar("¡Compilador NotaScript terminado con exito!");
         
     } sino {
         romper;

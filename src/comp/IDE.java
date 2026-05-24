@@ -47,6 +47,9 @@ public class IDE extends javax.swing.JFrame {
 
     //variable global para acceder al numero de linea
     NumeroLinea numeroLinea;
+    
+    // Variable para guardar el resultado de la última compilación exitosa
+    private comp.sintax parserCompilado = null;
 
     //tabla
     DefaultTableModel modelo;
@@ -72,6 +75,10 @@ public class IDE extends javax.swing.JFrame {
             jtaConsola.setText("");
             dir.Nuevo(this);
         });
+
+        // >>> NUEVOS AMARRES PARA CÓDIGO INTERMEDIO <<<
+        MenuC3D.addActionListener(e -> mostrarC3DOriginal());
+        MenuC3DOptimizado.addActionListener(e -> mostrarC3DOptimizado());
 
         //código para el tamaño de las letras
         jtpCodigo.addMouseWheelListener(e -> {
@@ -470,6 +477,8 @@ public class IDE extends javax.swing.JFrame {
         jMenu2 = new javax.swing.JMenu();
         MenuTokens = new javax.swing.JMenuItem();
         btnSintactico = new javax.swing.JMenuItem();
+        MenuC3D = new javax.swing.JMenuItem();
+        MenuC3DOptimizado = new javax.swing.JMenuItem();
 
         jMenuItem1.setText("jMenuItem1");
 
@@ -592,6 +601,12 @@ public class IDE extends javax.swing.JFrame {
             }
         });
         jMenu2.add(btnSintactico);
+
+        MenuC3D.setText("Codigo intermedio");
+        jMenu2.add(MenuC3D);
+
+        MenuC3DOptimizado.setText("Optimizacion de codigo");
+        jMenu2.add(MenuC3DOptimizado);
 
         jMenuBar1.add(jMenu2);
 
@@ -1052,19 +1067,19 @@ public void analisisSintactico() {
         String input = jtpCodigo.getText();
 
         // Asumo que LexerCup es tu lexer para CUP
-        sintax s = new sintax(new LexerCup(new StringReader(input)));
+        comp.sintax s = new comp.sintax(new LexerCup(new java.io.StringReader(input)));
 
         try {
             s.parse();
 
             // --- 1. RECOLECTAR ERRORES SINTÁCTICOS ---
             ArrayList<String> erroresParser = s.getErrores();
-            Pattern p = Pattern.compile("(?i)(?:l.nea|line)\\s*(\\d+)"); // ER para buscar el número de línea
+            java.util.regex.Pattern p = java.util.regex.Pattern.compile("(?i)(?:l.nea|line)\\s*(\\d+)");
 
             if (erroresParser != null && !erroresParser.isEmpty()) {
                 for (String err : erroresParser) {
                     int lineaDetectada = 0; 
-                    Matcher m = p.matcher(err);
+                    java.util.regex.Matcher m = p.matcher(err);
                     if (m.find()) {
                         lineaDetectada = Integer.parseInt(m.group(1));
                     }
@@ -1078,7 +1093,7 @@ public void analisisSintactico() {
             if (erroresSemanticos != null && !erroresSemanticos.isEmpty()) {
                 for (String errSem : erroresSemanticos) {
                     int lineaDetectada = 0; 
-                    Matcher m = p.matcher(errSem);
+                    java.util.regex.Matcher m = p.matcher(errSem);
                     if (m.find()) {
                         lineaDetectada = Integer.parseInt(m.group(1));
                     }
@@ -1087,16 +1102,19 @@ public void analisisSintactico() {
                 }
             }
 
-            // >>> NUEVO: MOSTRAR C3D SI LA COMPILACIÓN FUE EXITOSA <<<
-            // Si la lista de errores sigue vacía, significa que el código es perfecto.
-            // Entonces mandamos llamar a la nueva ventana pasándole el parser 's'
+            // >>> NUEVO: GUARDAR EL PARSER EN MEMORIA SI NO HAY ERRORES <<<
             if (lista.isEmpty()) {
-                mostrarCodigoIntermedio(s);
+                // Guardamos el parser exitoso en la variable global para los botones
+                this.parserCompilado = s; 
+            } else {
+                // Si hubo errores, borramos el historial para obligar a arreglarlos
+                this.parserCompilado = null; 
             }
 
         } catch (Exception ex) {
             // En caso de error fatal del parser
             lista.add(new ErrorAlmacen("Error fatal: " + ex.getMessage(), Tokens.ERROR, 0, 0));
+            this.parserCompilado = null; // Borramos historial en caso de fallo crítico
         }
 
         return lista;
@@ -1653,10 +1671,60 @@ public void analisisSintactico() {
         frameC3D.add(scrollC3D);
         frameC3D.setVisible(true);
     }
+    
+    // Método para el Botón 1: "Ver Código Intermedio"
+    private void mostrarC3DOriginal() {
+        if (parserCompilado == null || parserCompilado.genC3D.cuadruplos.isEmpty()) {
+            javax.swing.JOptionPane.showMessageDialog(this, "Primero debes compilar un código sin errores.");
+            return;
+        }
+
+        JFrame frameC3D = new JFrame("Código Intermedio (Original)");
+        frameC3D.setSize(600, 400); frameC3D.setLocationRelativeTo(null);
+        String[] columnas = {"Operador", "Argumento 1", "Argumento 2", "Resultado (Temporal)"};
+        
+        javax.swing.table.DefaultTableModel modelo = new javax.swing.table.DefaultTableModel(columnas, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
+
+        for (comp.Cuarteto c : parserCompilado.genC3D.cuadruplos) {
+            modelo.addRow(new Object[]{c.operador, c.arg1, c.arg2, c.resultado});
+        }
+        frameC3D.add(new javax.swing.JScrollPane(new javax.swing.JTable(modelo)));
+        frameC3D.setVisible(true);
+    }
+
+    // Método para el Botón 2: "Optimizar Código"
+    private void mostrarC3DOptimizado() {
+        if (parserCompilado == null || parserCompilado.genC3D.cuadruplos.isEmpty()) {
+            javax.swing.JOptionPane.showMessageDialog(this, "Primero debes compilar un código sin errores.");
+            return;
+        }
+
+        // 1. Ejecutamos el motor de optimización
+        parserCompilado.genC3D.optimizar();
+
+        // 2. Mostramos el resultado
+        JFrame frameC3D = new JFrame("Código Intermedio (Optimizado)");
+        frameC3D.setSize(600, 400); frameC3D.setLocationRelativeTo(null);
+        String[] columnas = {"Operador", "Argumento 1", "Argumento 2", "Resultado (Temporal)"};
+        
+        javax.swing.table.DefaultTableModel modelo = new javax.swing.table.DefaultTableModel(columnas, 0) {
+            @Override public boolean isCellEditable(int r, int c) { return false; }
+        };
+
+        for (comp.Cuarteto c : parserCompilado.genC3D.cuadruplosOptimizados) {
+            modelo.addRow(new Object[]{c.operador, c.arg1, c.arg2, c.resultado});
+        }
+        frameC3D.add(new javax.swing.JScrollPane(new javax.swing.JTable(modelo)));
+        frameC3D.setVisible(true);
+    }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JMenu Archivo;
     private javax.swing.JMenuItem MenuAbrir;
+    private javax.swing.JMenuItem MenuC3D;
+    private javax.swing.JMenuItem MenuC3DOptimizado;
     private javax.swing.JMenuItem MenuGuardar;
     private javax.swing.JMenuItem MenuNuevo;
     private javax.swing.JMenuItem MenuReservadas;

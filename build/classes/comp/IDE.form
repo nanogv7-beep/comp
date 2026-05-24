@@ -158,6 +158,16 @@
                 <EventHandler event="actionPerformed" listener="java.awt.event.ActionListener" parameters="java.awt.event.ActionEvent" handler="btnSintacticoActionPerformed"/>
               </Events>
             </MenuItem>
+            <MenuItem class="javax.swing.JMenuItem" name="MenuC3D">
+              <Properties>
+                <Property name="text" type="java.lang.String" value="Codigo intermedio"/>
+              </Properties>
+            </MenuItem>
+            <MenuItem class="javax.swing.JMenuItem" name="MenuC3DOptimizado">
+              <Properties>
+                <Property name="text" type="java.lang.String" value="Optimizacion de codigo"/>
+              </Properties>
+            </MenuItem>
           </SubComponents>
         </Menu>
       </SubComponents>
