@@ -1,46 +1,54 @@
-seccion: PruebaFinal {
+seccion: LucesNavidenas {
 
-    // --- 1. PRUEBA DE OPTIMIZACIÓN: Plegamiento de Constantes ---
-    // El C3D original hará la multiplicación y suma. 
-    // El C3D Optimizado lo convertirá directo en: x = 50, y = 52
-    definir x = 10 * 5;
-    definir y = x + 2;
-
-    // --- 2. PRUEBA DE OPTIMIZACIÓN: Simplificación Algebraica ---
-    // El C3D Optimizado eliminará los ceros y unos innecesarios.
-    definir redundante = y * 1;
-    definir tonto = y + 0;
-    definir anulado = y * 0;
-
-    // --- 3. PRUEBA DE SEMÁNTICA MUSICAL ESTRICTA ---
-    // Octavas válidas (0-8) y asignación correcta de tipos
-    definir n1 = nota do octava 4;
-    definir n2 = nota mi octava 5;
-    definir n3 = nota sol;
-
-    // --- 4. PRUEBA DE ACORDES Y MELODÍAS ---
-    // Acorde exige mínimo 2 notas separadas por coma
-    acorde AcordeFinal (n1, n2, n3);
+    mostrar("--- INICIANDO SECUENCIA NAVIDEÑA ---");
     
-    // Melodía solo acepta notas
-    melodia MelodiaFinal { n1, n2, nota la octava 4 };
+    // 1. Definimos las notas principales de Jingle Bells
+    definir m = nota mi octava 4;
+    definir s = nota sol octava 4;
+    definir d = nota do octava 4;
+    definir r = nota re octava 4;
 
-    // --- 5. PRUEBA DE INTERFAZ Y CONTROL DE FLUJO ---
-    mostrar("Generando Cuadruplos Optimizados...");
-    definir usuario = leer("Presiona Enter para escuchar:");
+    // 2. Definimos notas graves para hacer "bajeo" (simulando los destellos)
+    definir doBajo = nota do octava 3;
+    definir solBajo = nota sol octava 3;
 
-    si_ (x > 40) {
+    // 3. Estructuras musicales
+    // Usamos los acordes como si fueran diferentes colores de luces encendiéndose
+    acorde LuzRoja (doBajo, m, s);
+    acorde LuzVerde (solBajo, r, s);
+    
+    // Las dos partes icónicas de la canción
+    // Parte 1: "Navidad, Navidad"
+    melodia JingleParte1 { m, m, m };
+    
+    // Parte 2: "Dulce Navidad"
+    melodia JingleParte2 { m, s, d, r, m };
+
+    // 4. Secuencia de parpadeo y sonido
+    mostrar("Encendiendo arbolito...");
+    
+    // El ciclo simula la intermitencia de la serie navideña
+    repetir 3 veces {
         
-        repetir 2 veces {
-            tocar(MelodiaFinal);
-            silencio;
-        }
+        // Destello 1 (Rojo)
+        mostrar(" [*] LUZ ROJA ENCENDIDA [*] ");
+        tocar(LuzRoja);
+        tocar(JingleParte1);
+        silencio;
+
+        // Destello 2 (Verde)
+        mostrar(" [*] LUZ VERDE ENCENDIDA [*] ");
+        tocar(LuzVerde);
+        tocar(JingleParte1);
+        silencio;
         
-        tocar(AcordeFinal);
-        mostrar("¡Compilador NotaScript terminado con exito!");
-        
-    } sino {
-        romper;
+        // Destello 3 (Dorado - Parte final de la estrofa)
+        mostrar(" [*] LUZ DORADA DESTELLANDO [*] ");
+        tocar(LuzRoja);
+        tocar(JingleParte2);
+        silencio;
     }
+    
+    mostrar("¡Feliz Navidad y Compilacion Exitosa!");
 
 } fin

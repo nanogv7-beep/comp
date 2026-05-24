@@ -627,62 +627,6 @@ public class IDE extends javax.swing.JFrame {
     }//GEN-LAST:event_jtpCodigoKeyReleased
 
     private void btnCompilarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnCompilarActionPerformed
-        jtaConsola.setText(""); // Limpiar consola al inicio
-
-        /* try {
-            // 1. Ejecutar Léxico y obtener resultados
-            List erroresLexicos = probarLex();
-
-            // 2. Ejecutar Sintáctico y obtener resultados
-            // (Ahora se ejecuta SIEMPRE, haya errores léxicos o no)
-            String erroresSintacticos = probarSintactico();
-
-            // 3. Evaluar resultados combinados
-            boolean hayErroresLex = !erroresLexicos.isEmpty();
-            boolean hayErroresSin = !erroresSintacticos.isEmpty();
-
-            if (!hayErroresLex && !hayErroresSin) {
-                // --- CASO DE ÉXITO ---
-                jtaConsola.setText("RESULTADO DEL ANÁLISIS:\n"
-                        + "-----------------------\n"
-                        + "Análisis Léxico:  Correcto\n"
-                        + "Análisis Sintáctico: Correcto\n\n"
-                        + "¡Compilación Exitosa! El código es válido.");
-                jtaConsola.setForeground(new Color(0, 100, 0)); // Verde Oscuro
-
-            } else {
-                // --- CASO DE ERROR (Mostramos todo junto) ---
-                StringBuilder reporteFinal = new StringBuilder();
-                reporteFinal.append("RESULTADO DE LA COMPILACIÓN:\n");
-                reporteFinal.append("============================\n\n");
-
-                if (hayErroresLex) {
-                    reporteFinal.append(">>> ERRORES LÉXICOS ENCONTRADOS:\n");
-                    reporteFinal.append(erroresLexicos);
-                    reporteFinal.append("\n");
-                } else {
-                    reporteFinal.append(">>> Análisis Léxico: Sin errores.\n\n");
-                }
-
-                if (hayErroresSin) {
-                    reporteFinal.append(">>> ERRORES SINTÁCTICOS ENCONTRADOS:\n");
-                    reporteFinal.append(erroresSintacticos);
-                } else {
-                    reporteFinal.append(">>> Análisis Sintáctico: Sin errores.\n");
-                }
-
-                jtaConsola.setText(reporteFinal.toString());
-                jtaConsola.setForeground(Color.RED); // Rojo
-            }
-
-        } catch (IOException ex) {
-            jtaConsola.setText("Error crítico de archivo: " + ex.getMessage());
-            jtaConsola.setForeground(Color.RED);
-        }
-
-        // Actualizar tablas visuales
-        // llenarTablaSimbolos();
-         */
         jtaConsola.setText(""); // Limpiar consola
 
         try {
@@ -701,9 +645,12 @@ public class IDE extends javax.swing.JFrame {
                         + "-----------------------\n"
                         + "¡Compilación Exitosa! El código es válido.");
                 jtaConsola.setForeground(new Color(0, 100, 0)); // Verde
+                
+                // >>> AQUÍ INYECTAMOS LA GENERACIÓN AUTOMÁTICA <<<
+                generarCodigoEnsamblador();
+                
             } else {
                 // 4. ORDENAR y MOSTRAR
-
                 // Ordenar por número de línea
                 todosLosErrores.sort(Comparator.comparingInt(ErrorAlmacen::getLine));
 
@@ -1718,6 +1665,31 @@ public void analisisSintactico() {
         }
         frameC3D.add(new javax.swing.JScrollPane(new javax.swing.JTable(modelo)));
         frameC3D.setVisible(true);
+    }
+    
+    // --- MÉTODO PARA GENERAR ENSAMBLADOR AUTOMÁTICAMENTE ---
+    private void generarCodigoEnsamblador() {
+        // Verificamos que el parser haya guardado la información exitosamente
+        if (this.parserCompilado == null || this.parserCompilado.genC3D.cuadruplos.isEmpty()) {
+            return; 
+        }
+
+        // 1. Ejecutamos la optimización "silenciosamente" (en memoria) 
+        // para asegurarnos de que el ensamblador se genere limpio
+        this.parserCompilado.genC3D.optimizar();
+
+        // 2. Instanciamos nuestra nueva clase traductora
+        comp.GeneradorASM generadorAsm = new comp.GeneradorASM();
+        
+        // 3. Nombre del archivo que se creará en la carpeta de tu proyecto
+        String rutaArchivo = "NotaScript_Output.asm";
+        
+        // 4. Generamos el archivo físico
+        generadorAsm.generarArchivo(this.parserCompilado.genC3D.cuadruplosOptimizados, rutaArchivo);
+        
+        // 5. Agregamos un mensaje de confirmación a la consola del IDE
+        jtaConsola.append("\n\n>>> ¡Fase 6 Completada! <<<\n");
+        jtaConsola.append("Archivo Ensamblador generado exitosamente:\n[" + rutaArchivo + "]");
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
