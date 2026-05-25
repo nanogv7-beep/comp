@@ -31,7 +31,7 @@ public class GeneradorASM {
             // 2. ENCABEZADO DEL ARCHIVO ENSAMBLADOR
             writer.println("; ==========================================");
             writer.println("; CODIGO OBJETO GENERADO POR NOTASCRIPT");
-            writer.println("; COMPILADOR PARA 8086 (PROTEUS)");
+            writer.println("; COMPILADOR PARA 8086 (DOSBOX / PC SPEAKER)");
             writer.println("; ==========================================\n");
             
             writer.println(".MODEL SMALL");
@@ -123,44 +123,82 @@ public class GeneradorASM {
             writer.println("    MOV AX, 4C00h");
             writer.println("    INT 21h\n");
 
-            // 7. RUTINAS DE HARDWARE (PUERTO 01H PARA LA BOCINA)
+            // 7. RUTINAS DE SONIDO PARA PC SPEAKER (DOSBox)
+            // El PIT 8253/8254 canal 2 controla la bocina del PC.
+            // Divisor = 1193180 / frecuencia_Hz
+            // Puerto 43h: byte de control del PIT
+            // Puerto 42h: divisor (LSB luego MSB)
+            // Puerto 61h: bit0=gate del canal 2, bit1=habilitar bocina
             writer.println("; ==========================================");
-            writer.println("; SUBRUTINAS DE HARDWARE Y SONIDO");
+            writer.println("; SUBRUTINAS DE SONIDO PARA PC SPEAKER (DOSBOX)");
             writer.println("; ==========================================");
-            
+
+            // --- RUTINA_SONIDO ---
             writer.println("RUTINA_SONIDO PROC");
             writer.println("    PUSH AX");
+            writer.println("    PUSH BX");
             writer.println("    PUSH CX");
-            writer.println("BUCLE_NOTA:");
-            writer.println("    MOV AL, 1");
-            writer.println("    OUT 01h, AL  ; Sube voltaje de la bocina");
+            writer.println("    PUSH DX");
+            writer.println("    ; Verificar frecuencia minima (>= 40 Hz evita overflow en DIV)");
+            writer.println("    CMP CX, 28h");
+            writer.println("    JB FIN_SONIDO");
+            writer.println("    ; Calcular divisor del PIT: 1193180 / CX");
+            writer.println("    ; 1193180 = 0x001234DC -> DX:AX");
+            writer.println("    MOV BX, CX");
+            writer.println("    MOV DX, 0012h");
+            writer.println("    MOV AX, 34DCh");
+            writer.println("    DIV BX              ; AX = divisor");
+            writer.println("    ; Programar PIT canal 2: modo 3 (onda cuadrada), LSB+MSB");
+            writer.println("    MOV BX, AX");
+            writer.println("    MOV AL, 0B6h");
+            writer.println("    OUT 43h, AL");
+            writer.println("    MOV AL, BL");
+            writer.println("    OUT 42h, AL         ; Divisor: parte baja");
+            writer.println("    MOV AL, BH");
+            writer.println("    OUT 42h, AL         ; Divisor: parte alta");
+            writer.println("    ; Activar la bocina (puerto 61h bits 0 y 1)");
+            writer.println("    IN AL, 61h");
+            writer.println("    OR AL, 03h");
+            writer.println("    OUT 61h, AL");
+            writer.println("    ; Esperar duracion de la nota");
             writer.println("    CALL RETARDO");
-            writer.println("    MOV AL, 0");
-            writer.println("    OUT 01h, AL  ; Baja voltaje de la bocina");
-            writer.println("    CALL RETARDO");
-            writer.println("    LOOP BUCLE_NOTA ; Repite según la nota en CX");
+            writer.println("    ; Desactivar la bocina");
+            writer.println("    IN AL, 61h");
+            writer.println("    AND AL, 0FCh");
+            writer.println("    OUT 61h, AL");
+            writer.println("FIN_SONIDO:");
+            writer.println("    POP DX");
             writer.println("    POP CX");
+            writer.println("    POP BX");
             writer.println("    POP AX");
             writer.println("    RET");
             writer.println("RUTINA_SONIDO ENDP\n");
 
+            // --- RUTINA_SILENCIO ---
             writer.println("RUTINA_SILENCIO PROC");
-            writer.println("    PUSH CX");
-            writer.println("    MOV CX, 0FFFFh ; Tiempo largo en silencio");
-            writer.println("BUCLE_S:");
-            writer.println("    NOP");
-            writer.println("    LOOP BUCLE_S");
-            writer.println("    POP CX");
+            writer.println("    PUSH AX");
+            writer.println("    ; Asegurarse de que la bocina este apagada");
+            writer.println("    IN AL, 61h");
+            writer.println("    AND AL, 0FCh");
+            writer.println("    OUT 61h, AL");
+            writer.println("    CALL RETARDO");
+            writer.println("    POP AX");
             writer.println("    RET");
             writer.println("RUTINA_SILENCIO ENDP\n");
-            
+
+            // --- RETARDO (~250 ms via BIOS INT 15h AH=86h) ---
+            // CX:DX = microsegundos; 250000 us = 0x0003D090h
             writer.println("RETARDO PROC");
+            writer.println("    PUSH AX");
             writer.println("    PUSH CX");
-            writer.println("    MOV CX, 0FFFh ; Ajustar este valor en Proteus");
-            writer.println("DELAY_LOOP:");
-            writer.println("    NOP");
-            writer.println("    LOOP DELAY_LOOP");
+            writer.println("    PUSH DX");
+            writer.println("    MOV AH, 86h         ; BIOS Wait");
+            writer.println("    MOV CX, 0003h       ; ~250 ms = 250000 us = 0x0003D090h");
+            writer.println("    MOV DX, 0D090h");
+            writer.println("    INT 15h");
+            writer.println("    POP DX");
             writer.println("    POP CX");
+            writer.println("    POP AX");
             writer.println("    RET");
             writer.println("RETARDO ENDP\n");
 

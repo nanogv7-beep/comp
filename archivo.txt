@@ -1,54 +1,55 @@
-seccion: LucesNavidenas {
+seccion: NocheDePaz {
 
-    mostrar("--- INICIANDO SECUENCIA NAVIDEÑA ---");
-    
-    // 1. Definimos las notas principales de Jingle Bells
-    definir m = nota mi octava 4;
-    definir s = nota sol octava 4;
-    definir d = nota do octava 4;
-    definir r = nota re octava 4;
+    // ============================================================
+    // DEFINICION DE NOTAS
+    // (nombres con prefijo "n" para evitar conflicto con tokens NOTE)
+    // ============================================================
+    definir nSol4 = nota sol octava 4;
+    definir nLa4  = nota la  octava 4;
+    definir nMi4  = nota mi  octava 4;
+    definir nSi4  = nota si  octava 4;
+    definir nDo5  = nota do  octava 5;
+    definir nRe5  = nota re  octava 5;
 
-    // 2. Definimos notas graves para hacer "bajeo" (simulando los destellos)
-    definir doBajo = nota do octava 3;
-    definir solBajo = nota sol octava 3;
+    mostrar("=== Noche de Paz - Silent Night ===");
 
-    // 3. Estructuras musicales
-    // Usamos los acordes como si fueran diferentes colores de luces encendiéndose
-    acorde LuzRoja (doBajo, m, s);
-    acorde LuzVerde (solBajo, r, s);
-    
-    // Las dos partes icónicas de la canción
-    // Parte 1: "Navidad, Navidad"
-    melodia JingleParte1 { m, m, m };
-    
-    // Parte 2: "Dulce Navidad"
-    melodia JingleParte2 { m, s, d, r, m };
+    // === "Noche de paz, noche de amor" ===
+    tocar(nSol4); tocar(nLa4); tocar(nSol4);
+    silencio;
+    tocar(nMi4); tocar(nMi4);
+    silencio;
 
-    // 4. Secuencia de parpadeo y sonido
-    mostrar("Encendiendo arbolito...");
-    
-    // El ciclo simula la intermitencia de la serie navideña
-    repetir 3 veces {
-        
-        // Destello 1 (Rojo)
-        mostrar(" [*] LUZ ROJA ENCENDIDA [*] ");
-        tocar(LuzRoja);
-        tocar(JingleParte1);
-        silencio;
+    // === Repeticion del motivo ===
+    tocar(nSol4); tocar(nLa4); tocar(nSol4);
+    silencio;
+    tocar(nMi4); tocar(nMi4);
+    silencio;
 
-        // Destello 2 (Verde)
-        mostrar(" [*] LUZ VERDE ENCENDIDA [*] ");
-        tocar(LuzVerde);
-        tocar(JingleParte1);
-        silencio;
-        
-        // Destello 3 (Dorado - Parte final de la estrofa)
-        mostrar(" [*] LUZ DORADA DESTELLANDO [*] ");
-        tocar(LuzRoja);
-        tocar(JingleParte2);
-        silencio;
-    }
-    
-    mostrar("¡Feliz Navidad y Compilacion Exitosa!");
+    // === "Todos duermen en derredor" ===
+    tocar(nRe5); tocar(nRe5);
+    silencio;
+    tocar(nSi4);
+    silencio;
+
+    // === "Solo velan en su ardor" ===
+    tocar(nDo5); tocar(nDo5);
+    silencio;
+    tocar(nSol4);
+    silencio;
+
+    // === "La Virgen y el nino" ===
+    tocar(nSi4); tocar(nDo5); tocar(nSi4);
+    silencio;
+    tocar(nSol4);
+    silencio;
+
+    // === "Duermen en paz" (coda) ===
+    tocar(nRe5); tocar(nRe5); tocar(nRe5);
+    silencio;
+    tocar(nSi4); tocar(nDo5);
+    silencio;
+    tocar(nSol4);
+
+    mostrar("Feliz Navidad!");
 
 } fin

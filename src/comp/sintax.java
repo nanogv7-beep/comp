@@ -939,6 +939,67 @@ public class sintax extends java_cup.runtime.lr_parser {
         }
     }
 
+    // --- CONVERSIÓN DE NOTA MUSICAL A FRECUENCIA EN Hz (para PC Speaker / DOSBox) ---
+    // Usa afinación estándar A4 = 440 Hz (temperamento igual).
+    // Fórmula: freq = 440 * 2^((midiNote - 69) / 12)
+    // MIDI: C4 = 60, A4 = 69; C en octava n = 12*(n+1) + semitono
+    public int notaAFrecuencia(String notaStr, int octava) {
+        String n = notaStr.toLowerCase();
+        // Extraer octava incrustada en el token de nota (ej: "do4" -> octava 4)
+        if (!n.isEmpty()) {
+            char last = n.charAt(n.length() - 1);
+            if (Character.isDigit(last)) {
+                octava = Character.getNumericValue(last);
+                n = n.substring(0, n.length() - 1);
+            }
+        }
+        int semitono;
+        String resto;
+        if (n.startsWith("sol")) {
+            semitono = 7;
+            resto = n.substring(3);
+            if (resto.contains("#")) semitono = 8;
+            else if (resto.contains("b")) semitono = 6;
+        } else if (n.startsWith("si")) {
+            semitono = 11;
+            resto = n.substring(2);
+            if (resto.contains("#")) { semitono = 0; octava++; }
+            else if (resto.contains("b")) semitono = 10;
+        } else if (n.startsWith("do")) {
+            semitono = 0;
+            resto = n.substring(2);
+            if (resto.contains("#")) semitono = 1;
+            else if (resto.contains("b")) { semitono = 11; octava--; }
+        } else if (n.startsWith("re")) {
+            semitono = 2;
+            resto = n.substring(2);
+            if (resto.contains("#")) semitono = 3;
+            else if (resto.contains("b")) semitono = 1;
+        } else if (n.startsWith("mi")) {
+            semitono = 4;
+            resto = n.substring(2);
+            if (resto.contains("#")) semitono = 5;
+            else if (resto.contains("b")) semitono = 3;
+        } else if (n.startsWith("fa")) {
+            semitono = 5;
+            resto = n.substring(2);
+            if (resto.contains("#")) semitono = 6;
+            else if (resto.contains("b")) semitono = 4;
+        } else if (n.startsWith("la")) {
+            semitono = 9;
+            resto = n.substring(2);
+            if (resto.contains("#")) semitono = 10;
+            else if (resto.contains("b")) semitono = 8;
+        } else {
+            semitono = 0;
+        }
+        int midiNote = 12 * (octava + 1) + semitono;
+        double freq = 440.0 * Math.pow(2.0, (midiNote - 69.0) / 12.0);
+        int freqInt = (int) Math.round(freq);
+        // Limitar rango válido: PIT divisor = 1193180/freq; con 16-bit DIV, freq >= 19 evita overflow
+        return Math.max(40, Math.min(freqInt, 32000));
+    }
+
 
 /** Cup generated class to encapsulate user supplied action code.*/
 @SuppressWarnings({"rawtypes", "unchecked", "unused"})
@@ -2575,7 +2636,8 @@ class CUP$sintax$actions {
           if (octava < 0 || octava > 8) {
               parser.reportar_error_semantico("La octava debe estar entre 0 y 8 (se encontró: " + octava + ").", nleft, nright);
           }
-          RESULT = new NodoC3D("nota", "nota_def");
+          int freq = parser.notaAFrecuencia(n.toString(), octava);
+          RESULT = new NodoC3D("nota", String.valueOf(freq));
       
               CUP$sintax$result = parser.getSymbolFactory().newSymbol("definicion_nota",25, ((java_cup.runtime.Symbol)CUP$sintax$stack.elementAt(CUP$sintax$top-3)), ((java_cup.runtime.Symbol)CUP$sintax$stack.peek()), RESULT);
             }
@@ -2588,7 +2650,10 @@ class CUP$sintax$actions {
 		int nleft = ((java_cup.runtime.Symbol)CUP$sintax$stack.peek()).left;
 		int nright = ((java_cup.runtime.Symbol)CUP$sintax$stack.peek()).right;
 		Object n = (Object)((java_cup.runtime.Symbol) CUP$sintax$stack.peek()).value;
-		 RESULT = new NodoC3D("nota", "nota_def"); 
+		
+          int freq = parser.notaAFrecuencia(n.toString(), 4);
+          RESULT = new NodoC3D("nota", String.valueOf(freq));
+      
               CUP$sintax$result = parser.getSymbolFactory().newSymbol("definicion_nota",25, ((java_cup.runtime.Symbol)CUP$sintax$stack.elementAt(CUP$sintax$top-1)), ((java_cup.runtime.Symbol)CUP$sintax$stack.peek()), RESULT);
             }
           return CUP$sintax$result;
@@ -2608,7 +2673,8 @@ class CUP$sintax$actions {
           if (octava < 0 || octava > 8) {
               parser.reportar_error_semantico("La octava debe estar entre 0 y 8 (se encontró: " + octava + ").", nleft, nright);
           }
-          RESULT = new NodoC3D("nota", "nota_def");
+          int freq = parser.notaAFrecuencia(n.toString(), octava);
+          RESULT = new NodoC3D("nota", String.valueOf(freq));
       
               CUP$sintax$result = parser.getSymbolFactory().newSymbol("definicion_nota",25, ((java_cup.runtime.Symbol)CUP$sintax$stack.elementAt(CUP$sintax$top-7)), ((java_cup.runtime.Symbol)CUP$sintax$stack.peek()), RESULT);
             }
@@ -2621,7 +2687,10 @@ class CUP$sintax$actions {
 		int nleft = ((java_cup.runtime.Symbol)CUP$sintax$stack.elementAt(CUP$sintax$top-4)).left;
 		int nright = ((java_cup.runtime.Symbol)CUP$sintax$stack.elementAt(CUP$sintax$top-4)).right;
 		Object n = (Object)((java_cup.runtime.Symbol) CUP$sintax$stack.elementAt(CUP$sintax$top-4)).value;
-		 RESULT = new NodoC3D("nota", "nota_def"); 
+		
+          int freq = parser.notaAFrecuencia(n.toString(), 4);
+          RESULT = new NodoC3D("nota", String.valueOf(freq));
+      
               CUP$sintax$result = parser.getSymbolFactory().newSymbol("definicion_nota",25, ((java_cup.runtime.Symbol)CUP$sintax$stack.elementAt(CUP$sintax$top-5)), ((java_cup.runtime.Symbol)CUP$sintax$stack.peek()), RESULT);
             }
           return CUP$sintax$result;

@@ -1,118 +1,196 @@
 ; ==========================================
 ; CODIGO OBJETO GENERADO POR NOTASCRIPT
-; COMPILADOR PARA 8086 (PROTEUS)
+; COMPILADOR PARA 8086 (DOSBOX / PC SPEAKER)
 ; ==========================================
 
 .MODEL SMALL
 .STACK 100h
 .DATA
-    r DW 0  ; Variable o temporal
-    JingleParte1 DW 0  ; Variable o temporal
-    s DW 0  ; Variable o temporal
-    solBajo DW 0  ; Variable o temporal
-    JingleParte2 DW 0  ; Variable o temporal
-    d DW 0  ; Variable o temporal
-    LuzRoja DW 0  ; Variable o temporal
-    m DW 0  ; Variable o temporal
-    nota_def DW 0  ; Variable o temporal
-    LuzVerde DW 0  ; Variable o temporal
-    doBajo DW 0  ; Variable o temporal
-    msg1 DB "--- INICIANDO SECUENCIA NAVIDEÑA ---", '$'
-    msg2 DB "Encendiendo arbolito...", '$'
-    msg3 DB " [*] LUZ ROJA ENCENDIDA [*] ", '$'
-    msg4 DB " [*] LUZ VERDE ENCENDIDA [*] ", '$'
-    msg5 DB " [*] LUZ DORADA DESTELLANDO [*] ", '$'
-    msg6 DB "¡Feliz Navidad y Compilacion Exitosa!", '$'
+    nLa4 DW 0  ; Variable o temporal
+    nSi4 DW 0  ; Variable o temporal
+    nSol4 DW 0  ; Variable o temporal
+    nRe5 DW 0  ; Variable o temporal
+    nMi4 DW 0  ; Variable o temporal
+    nDo5 DW 0  ; Variable o temporal
+    msg1 DB "=== Noche de Paz - Silent Night ===", '$'
+    msg2 DB "Feliz Navidad!", '$'
 
 .CODE
 INICIO:
     MOV AX, @DATA
     MOV DS, AX
 
-    ; Instrucción: MOSTRAR "--- INICIANDO SECUENCIA NAVIDEÑA ---"  
+    ; Instrucción: = 392  nSol4
+    MOV AX, 392
+    MOV nSol4, AX
+
+    ; Instrucción: = 440  nLa4
+    MOV AX, 440
+    MOV nLa4, AX
+
+    ; Instrucción: = 330  nMi4
+    MOV AX, 330
+    MOV nMi4, AX
+
+    ; Instrucción: = 494  nSi4
+    MOV AX, 494
+    MOV nSi4, AX
+
+    ; Instrucción: = 523  nDo5
+    MOV AX, 523
+    MOV nDo5, AX
+
+    ; Instrucción: = 587  nRe5
+    MOV AX, 587
+    MOV nRe5, AX
+
+    ; Instrucción: MOSTRAR "=== Noche de Paz - Silent Night ==="  
     LEA DX, msg1
     MOV AH, 09h
     INT 21h
 
-    ; Instrucción: = nota_def  m
-    MOV AX, nota_def
-    MOV m, AX
+    ; Instrucción: TOCAR nSol4  
+    MOV CX, nSol4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
 
-    ; Instrucción: = nota_def  s
-    MOV AX, nota_def
-    MOV s, AX
+    ; Instrucción: TOCAR nLa4  
+    MOV CX, nLa4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
 
-    ; Instrucción: = nota_def  d
-    MOV AX, nota_def
-    MOV d, AX
+    ; Instrucción: TOCAR nSol4  
+    MOV CX, nSol4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
 
-    ; Instrucción: = nota_def  r
-    MOV AX, nota_def
-    MOV r, AX
+    ; Instrucción: SILENCIO   
+    CALL RUTINA_SILENCIO
 
-    ; Instrucción: = nota_def  doBajo
-    MOV AX, nota_def
-    MOV doBajo, AX
+    ; Instrucción: TOCAR nMi4  
+    MOV CX, nMi4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
 
-    ; Instrucción: = nota_def  solBajo
-    MOV AX, nota_def
-    MOV solBajo, AX
+    ; Instrucción: TOCAR nMi4  
+    MOV CX, nMi4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
 
-    ; Instrucción: MOSTRAR "Encendiendo arbolito..."  
+    ; Instrucción: SILENCIO   
+    CALL RUTINA_SILENCIO
+
+    ; Instrucción: TOCAR nSol4  
+    MOV CX, nSol4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: TOCAR nLa4  
+    MOV CX, nLa4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: TOCAR nSol4  
+    MOV CX, nSol4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: SILENCIO   
+    CALL RUTINA_SILENCIO
+
+    ; Instrucción: TOCAR nMi4  
+    MOV CX, nMi4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: TOCAR nMi4  
+    MOV CX, nMi4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: SILENCIO   
+    CALL RUTINA_SILENCIO
+
+    ; Instrucción: TOCAR nRe5  
+    MOV CX, nRe5 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: TOCAR nRe5  
+    MOV CX, nRe5 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: SILENCIO   
+    CALL RUTINA_SILENCIO
+
+    ; Instrucción: TOCAR nSi4  
+    MOV CX, nSi4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: SILENCIO   
+    CALL RUTINA_SILENCIO
+
+    ; Instrucción: TOCAR nDo5  
+    MOV CX, nDo5 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: TOCAR nDo5  
+    MOV CX, nDo5 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: SILENCIO   
+    CALL RUTINA_SILENCIO
+
+    ; Instrucción: TOCAR nSol4  
+    MOV CX, nSol4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: SILENCIO   
+    CALL RUTINA_SILENCIO
+
+    ; Instrucción: TOCAR nSi4  
+    MOV CX, nSi4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: TOCAR nDo5  
+    MOV CX, nDo5 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: TOCAR nSi4  
+    MOV CX, nSi4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: SILENCIO   
+    CALL RUTINA_SILENCIO
+
+    ; Instrucción: TOCAR nSol4  
+    MOV CX, nSol4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: SILENCIO   
+    CALL RUTINA_SILENCIO
+
+    ; Instrucción: TOCAR nRe5  
+    MOV CX, nRe5 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: TOCAR nRe5  
+    MOV CX, nRe5 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: TOCAR nRe5  
+    MOV CX, nRe5 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: SILENCIO   
+    CALL RUTINA_SILENCIO
+
+    ; Instrucción: TOCAR nSi4  
+    MOV CX, nSi4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: TOCAR nDo5  
+    MOV CX, nDo5 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: SILENCIO   
+    CALL RUTINA_SILENCIO
+
+    ; Instrucción: TOCAR nSol4  
+    MOV CX, nSol4 ; Frecuencia de la nota
+    CALL RUTINA_SONIDO
+
+    ; Instrucción: MOSTRAR "Feliz Navidad!"  
     LEA DX, msg2
-    MOV AH, 09h
-    INT 21h
-
-    ; Instrucción: MOSTRAR " [*] LUZ ROJA ENCENDIDA [*] "  
-    LEA DX, msg3
-    MOV AH, 09h
-    INT 21h
-
-    ; Instrucción: TOCAR LuzRoja  
-    MOV CX, LuzRoja ; Frecuencia de la nota
-    CALL RUTINA_SONIDO
-
-    ; Instrucción: TOCAR JingleParte1  
-    MOV CX, JingleParte1 ; Frecuencia de la nota
-    CALL RUTINA_SONIDO
-
-    ; Instrucción: SILENCIO   
-    CALL RUTINA_SILENCIO
-
-    ; Instrucción: MOSTRAR " [*] LUZ VERDE ENCENDIDA [*] "  
-    LEA DX, msg4
-    MOV AH, 09h
-    INT 21h
-
-    ; Instrucción: TOCAR LuzVerde  
-    MOV CX, LuzVerde ; Frecuencia de la nota
-    CALL RUTINA_SONIDO
-
-    ; Instrucción: TOCAR JingleParte1  
-    MOV CX, JingleParte1 ; Frecuencia de la nota
-    CALL RUTINA_SONIDO
-
-    ; Instrucción: SILENCIO   
-    CALL RUTINA_SILENCIO
-
-    ; Instrucción: MOSTRAR " [*] LUZ DORADA DESTELLANDO [*] "  
-    LEA DX, msg5
-    MOV AH, 09h
-    INT 21h
-
-    ; Instrucción: TOCAR LuzRoja  
-    MOV CX, LuzRoja ; Frecuencia de la nota
-    CALL RUTINA_SONIDO
-
-    ; Instrucción: TOCAR JingleParte2  
-    MOV CX, JingleParte2 ; Frecuencia de la nota
-    CALL RUTINA_SONIDO
-
-    ; Instrucción: SILENCIO   
-    CALL RUTINA_SILENCIO
-
-    ; Instrucción: MOSTRAR "¡Feliz Navidad y Compilacion Exitosa!"  
-    LEA DX, msg6
     MOV AH, 09h
     INT 21h
 
@@ -121,41 +199,70 @@ INICIO:
     INT 21h
 
 ; ==========================================
-; SUBRUTINAS DE HARDWARE Y SONIDO
+; SUBRUTINAS DE SONIDO PARA PC SPEAKER (DOSBOX)
 ; ==========================================
 RUTINA_SONIDO PROC
     PUSH AX
+    PUSH BX
     PUSH CX
-BUCLE_NOTA:
-    MOV AL, 1
-    OUT 01h, AL  ; Sube voltaje de la bocina
+    PUSH DX
+    ; Verificar frecuencia minima (>= 40 Hz evita overflow en DIV)
+    CMP CX, 28h
+    JB FIN_SONIDO
+    ; Calcular divisor del PIT: 1193180 / CX
+    ; 1193180 = 0x001234DC -> DX:AX
+    MOV BX, CX
+    MOV DX, 0012h
+    MOV AX, 34DCh
+    DIV BX              ; AX = divisor
+    ; Programar PIT canal 2: modo 3 (onda cuadrada), LSB+MSB
+    MOV BX, AX
+    MOV AL, 0B6h
+    OUT 43h, AL
+    MOV AL, BL
+    OUT 42h, AL         ; Divisor: parte baja
+    MOV AL, BH
+    OUT 42h, AL         ; Divisor: parte alta
+    ; Activar la bocina (puerto 61h bits 0 y 1)
+    IN AL, 61h
+    OR AL, 03h
+    OUT 61h, AL
+    ; Esperar duracion de la nota
     CALL RETARDO
-    MOV AL, 0
-    OUT 01h, AL  ; Baja voltaje de la bocina
-    CALL RETARDO
-    LOOP BUCLE_NOTA ; Repite según la nota en CX
+    ; Desactivar la bocina
+    IN AL, 61h
+    AND AL, 0FCh
+    OUT 61h, AL
+FIN_SONIDO:
+    POP DX
     POP CX
+    POP BX
     POP AX
     RET
 RUTINA_SONIDO ENDP
 
 RUTINA_SILENCIO PROC
-    PUSH CX
-    MOV CX, 0FFFFh ; Tiempo largo en silencio
-BUCLE_S:
-    NOP
-    LOOP BUCLE_S
-    POP CX
+    PUSH AX
+    ; Asegurarse de que la bocina este apagada
+    IN AL, 61h
+    AND AL, 0FCh
+    OUT 61h, AL
+    CALL RETARDO
+    POP AX
     RET
 RUTINA_SILENCIO ENDP
 
 RETARDO PROC
+    PUSH AX
     PUSH CX
-    MOV CX, 0FFFh ; Ajustar este valor en Proteus
-DELAY_LOOP:
-    NOP
-    LOOP DELAY_LOOP
+    PUSH DX
+    MOV AH, 86h         ; BIOS Wait
+    MOV CX, 0003h       ; ~250 ms = 250000 us = 0x0003D090h
+    MOV DX, 0D090h
+    INT 15h
+    POP DX
     POP CX
+    POP AX
     RET
 RETARDO ENDP
 
