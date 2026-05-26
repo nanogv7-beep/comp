@@ -307,6 +307,9 @@ terminal KW_TRUE, KW_FALSE;
 
 non terminal INICIO, SENTENCIA, DECLARACION, INSTRUCCION;
 non terminal lista_sentencias, bloque;
+non terminal if_cond, if_then_done, else_clause;
+non terminal while_cond_start, while_cond, repetir_header;
+non terminal segun_header, caso_header;
 non terminal if_sentencia, while_sentencia, repetir_sentencia;
 non terminal segun_sentencia, casos_segun, caso, defecto_opcional;
 non terminal lista_elementos, elementos, velocidad;
@@ -398,9 +401,15 @@ DECLARACION ::=
     | KW_SILENCIO PuntoComa
       {: parser.genC3D.agregar("SILENCIO", "", "", ""); :}
     | KW_ROMPER PuntoComa
-      {: parser.genC3D.agregar("ROMPER", "", "", ""); :}
+      {:
+          String lRomper = parser.genC3D.getBreakLabel();
+          if (lRomper != null) { parser.genC3D.agregar("GOTO", "", "", lRomper); }
+      :}
     | KW_CONTINUAR PuntoComa
-      {: parser.genC3D.agregar("CONTINUAR", "", "", ""); :}
+      {:
+          String lContinuar = parser.genC3D.getContinueLabel();
+          if (lContinuar != null) { parser.genC3D.agregar("GOTO", "", "", lContinuar); }
+      :}
 
       // 6. ASIGNACIÓN
     | Identificador:id Igual expresion:e PuntoComa
@@ -466,48 +475,178 @@ SENTENCIA ::=
     | bloque 
     ;
 
-/* --- TRAMPAS PARA ESTRUCTURAS DE CONTROL --- */
+/* --- ESTRUCTURAS DE CONTROL CON GENERACIÓN C3D --- */
 
-if_sentencia ::= 
-      KW_SI ParenAper expresion ParenCierre bloque
-    | KW_SI ParenAper expresion ParenCierre bloque KW_SINO bloque
+// if_cond: evalúa la condición y emite IF_FALSE; apila lEnd y lElse
+if_cond ::= KW_SI ParenAper expresion:cond ParenCierre
+{:
+    String lElse = parser.genC3D.nuevoLabel();
+    String lEnd  = parser.genC3D.nuevoLabel();
+    parser.genC3D.agregar("IF_FALSE", cond.dir, "", lElse);
+    parser.genC3D.pushLabel(lEnd);    // primero (fondo de pila)
+    parser.genC3D.pushLabel(lElse);   // segundo (cima de pila)
+:}
+;
+
+// if_then_done: después del bloque then, emite GOTO lEnd + LABEL lElse
+if_then_done ::= if_cond bloque
+{:
+    String lElse = parser.genC3D.popLabel();
+    String lEnd  = parser.genC3D.peekLabel();
+    parser.genC3D.agregar("GOTO", "", "", lEnd);
+    parser.genC3D.agregar("LABEL", "", "", lElse);
+:}
+;
+
+// else_clause: bloque sino opcional (shift/reduce resuelto por precedencia KW_SINO)
+else_clause ::= /* vacío */ | KW_SINO bloque ;
+
+if_sentencia ::=
+    if_then_done else_clause
+    {:
+        String lEnd = parser.genC3D.popLabel();
+        parser.genC3D.agregar("LABEL", "", "", lEnd);
+    :}
     | KW_SI ParenAper error ParenCierre bloque:s
       {: parser.report_context_error("Condición del 'si_' inválida. Revise la lógica.", s); :}
-    | KW_SI error bloque:s 
+    | KW_SI error bloque:s
       {: parser.report_context_error("Estructura 'si_' mal formada. ¿Faltan los paréntesis ( )?", s); :}
     ;
 
-while_sentencia ::= 
-      KW_MIENTRAS ParenAper expresion ParenCierre bloque
+// while_cond_start: consume "mientras (" y emite LABEL lStart ANTES de parsear
+// la condición. Así, cuando el bucle hace GOTO lStart, salta a ANTES de la
+// evaluación de la condición → ésta se re-evalúa en cada iteración.
+while_cond_start ::= KW_MIENTRAS ParenAper
+{:
+    String lStart = parser.genC3D.nuevoLabel();
+    String lEnd   = parser.genC3D.nuevoLabel();
+    parser.genC3D.agregar("LABEL", "", "", lStart);
+    parser.genC3D.pushLabel(lEnd);    // fondo de pila
+    parser.genC3D.pushLabel(lStart);  // cima de pila
+:}
+;
+
+// while_cond: una vez tenemos la condición, emite IF_FALSE y apila el contexto.
+while_cond ::= while_cond_start expresion:cond ParenCierre
+{:
+    String lStart = parser.genC3D.popLabel();
+    String lEnd   = parser.genC3D.popLabel();
+    parser.genC3D.agregar("IF_FALSE", cond.dir, "", lEnd);
+    parser.genC3D.pushLabel(lStart);
+    parser.genC3D.pushLabel(lEnd);
+    parser.genC3D.pushBreakLabel(lEnd);
+    parser.genC3D.pushContinueLabel(lStart);
+:}
+;
+
+while_sentencia ::=
+    while_cond bloque
+    {:
+        String lEnd   = parser.genC3D.popLabel();
+        String lStart = parser.genC3D.popLabel();
+        parser.genC3D.agregar("GOTO", "", "", lStart);
+        parser.genC3D.agregar("LABEL", "", "", lEnd);
+        parser.genC3D.popBreakLabel();
+        parser.genC3D.popContinueLabel();
+    :}
     | KW_MIENTRAS ParenAper error ParenCierre bloque:s
       {: parser.report_context_error("Condición del 'mientras' inválida.", s); :}
     | KW_MIENTRAS error bloque:s
       {: parser.report_context_error("Estructura 'mientras' inválida. ¿Faltan paréntesis?", s); :}
     ;
 
-repetir_sentencia ::= 
-      KW_REPETIR expresion KW_VECES bloque
+// repetir_header: inicializa contador, emite LABEL lStart + check > 0 + IF_FALSE lEnd
+repetir_header ::= KW_REPETIR expresion:e KW_VECES
+{:
+    String ctr    = parser.genC3D.nuevoTemporal();
+    String lStart = parser.genC3D.nuevoLabel();
+    String lEnd   = parser.genC3D.nuevoLabel();
+    parser.genC3D.agregar("=", e.dir, "", ctr);
+    parser.genC3D.agregar("LABEL", "", "", lStart);
+    String cond   = parser.genC3D.nuevoTemporal();
+    parser.genC3D.agregar(">", ctr, "0", cond);
+    parser.genC3D.agregar("IF_FALSE", cond, "", lEnd);
+    parser.genC3D.pushLabel(ctr);      // se usa para decrementar al final
+    parser.genC3D.pushLabel(lStart);
+    parser.genC3D.pushLabel(lEnd);
+    parser.genC3D.pushBreakLabel(lEnd);
+    parser.genC3D.pushContinueLabel(lStart);
+:}
+;
+
+repetir_sentencia ::=
+    repetir_header bloque
+    {:
+        String lEnd   = parser.genC3D.popLabel();
+        String lStart = parser.genC3D.popLabel();
+        String ctr    = parser.genC3D.popLabel();
+        parser.genC3D.agregar("-", ctr, "1", ctr);
+        parser.genC3D.agregar("GOTO", "", "", lStart);
+        parser.genC3D.agregar("LABEL", "", "", lEnd);
+        parser.genC3D.popBreakLabel();
+        parser.genC3D.popContinueLabel();
+    :}
     | KW_REPETIR expresion error bloque:s
       {: parser.report_context_error("Falta la palabra clave 'veces' en el ciclo.", s); :}
     | KW_REPETIR error KW_VECES bloque:s
       {: parser.report_context_error("Cantidad de repeticiones inválida.", s); :}
     ;
 
-segun_sentencia ::= 
-      KW_SEGUN ParenAper expresion ParenCierre LlaveAper casos_segun LlaveCierre
+// segun_header: copia expresión a temp y apila contexto segun
+segun_header ::= KW_SEGUN ParenAper expresion:e ParenCierre
+{:
+    String lFin   = parser.genC3D.nuevoLabel();
+    String segVar = parser.genC3D.nuevoTemporal();
+    parser.genC3D.agregar("=", e.dir, "", segVar);
+    parser.genC3D.iniciarSegun(segVar, lFin);
+    parser.genC3D.pushBreakLabel(lFin);
+:}
+;
+
+segun_sentencia ::=
+    segun_header LlaveAper casos_segun LlaveCierre
+    {:
+        String lFin = parser.genC3D.getSegunFin();
+        parser.genC3D.agregar("LABEL", "", "", lFin);
+        parser.genC3D.finalizarSegun();
+        parser.genC3D.popBreakLabel();
+    :}
     | KW_SEGUN error LlaveAper casos_segun LlaveCierre:s
       {: parser.report_context_error("Estructura 'segun' inválida. Use: segun(var) { ... }", s); :}
     ;
 
 casos_segun ::= caso | casos_segun caso | casos_segun defecto_opcional | defecto_opcional;
 
-caso ::= 
-      KW_CASO expresion DosPuntos bloque
+// caso_header: compara segunVar con val, emite IF_FALSE a lNext; apila lNext
+caso_header ::= KW_CASO expresion:val DosPuntos
+{:
+    String segunVar = parser.genC3D.getSegunVar();
+    String cmp      = parser.genC3D.nuevoTemporal();
+    String lNext    = parser.genC3D.nuevoLabel();
+    parser.genC3D.agregar("==", segunVar, val.dir, cmp);
+    parser.genC3D.agregar("IF_FALSE", cmp, "", lNext);
+    parser.genC3D.pushLabel(lNext);
+:}
+;
+
+caso ::=
+    caso_header bloque
+    {:
+        String lNext = parser.genC3D.popLabel();
+        String lFin  = parser.genC3D.getSegunFin();
+        parser.genC3D.agregar("GOTO", "", "", lFin);
+        parser.genC3D.agregar("LABEL", "", "", lNext);
+    :}
     | KW_CASO expresion error bloque:s
       {: parser.report_context_error("Faltan DOS PUNTOS ':' después del valor del 'caso'.", s); :}
     ;
 
-defecto_opcional ::= KW_DEFECTO DosPuntos bloque;
+defecto_opcional ::= KW_DEFECTO DosPuntos bloque
+{:
+    String lFin = parser.genC3D.getSegunFin();
+    if (lFin != null) { parser.genC3D.agregar("GOTO", "", "", lFin); }
+:}
+;
 
 /* ========================================================================== */
 /* ESTRUCTURAS MUSICALES ESTRICTAS (NOTAS, ACORDES Y MELODIAS)                */

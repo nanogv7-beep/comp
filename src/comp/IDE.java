@@ -1648,23 +1648,114 @@ public void analisisSintactico() {
             return;
         }
 
-        // 1. Ejecutamos el motor de optimización
+        // 1. Ejecutar el motor de optimización
         parserCompilado.genC3D.optimizar();
 
-        // 2. Mostramos el resultado
-        JFrame frameC3D = new JFrame("Código Intermedio (Optimizado)");
-        frameC3D.setSize(600, 400); frameC3D.setLocationRelativeTo(null);
-        String[] columnas = {"Operador", "Argumento 1", "Argumento 2", "Resultado (Temporal)"};
-        
+        java.util.ArrayList<comp.Cuarteto> original    = parserCompilado.genC3D.cuadruplos;
+        java.util.ArrayList<comp.Cuarteto> optimizados = parserCompilado.genC3D.cuadruplosOptimizados;
+
+        // 2. Calcular estadísticas
+        int eliminados  = original.size() - optimizados.size();
+        long modificados = optimizados.stream()
+                .filter(c -> c.nota != null && !c.nota.isEmpty() && !c.nota.equals("—"))
+                .count();
+        long inalterados = optimizados.size() - modificados;
+
+        // 3. Ventana principal
+        JFrame frame = new JFrame("Código Intermedio — Optimizado");
+        frame.setSize(1000, 580);
+        frame.setLocationRelativeTo(null);
+        frame.setLayout(new BorderLayout(0, 0));
+
+        // 4. Barra de resumen superior
+        String resumen = String.format(
+            "  Original: %d cuádruplos  →  Optimizado: %d cuádruplos   " +
+            "| Eliminados: %d  | Modificados: %d  | Sin cambios: %d",
+            original.size(), optimizados.size(), eliminados, modificados, inalterados);
+        JLabel lblResumen = new JLabel(resumen);
+        lblResumen.setFont(new Font("Monospaced", Font.BOLD, 12));
+        lblResumen.setOpaque(true);
+        lblResumen.setBackground(new Color(210, 228, 255));
+        lblResumen.setBorder(BorderFactory.createEmptyBorder(7, 10, 7, 10));
+        frame.add(lblResumen, BorderLayout.NORTH);
+
+        // 5. Leyenda de colores (panel inferior)
+        JPanel leyenda = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+        leyenda.setBackground(new Color(245, 245, 245));
+        leyenda.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, Color.LIGHT_GRAY));
+        agregarItemLeyenda(leyenda, new Color(160, 220, 160), "Plegamiento de constantes");
+        agregarItemLeyenda(leyenda, new Color(140, 200, 255), "Propagación de constantes");
+        agregarItemLeyenda(leyenda, new Color(255, 220, 100), "Simplificación algebraica");
+        agregarItemLeyenda(leyenda, new Color(220, 160, 255), "Fuente de propagación");
+        agregarItemLeyenda(leyenda, new Color(255, 185, 100), "Eliminación de temporal");
+        agregarItemLeyenda(leyenda, new Color(235, 235, 235), "Sin cambios");
+        frame.add(leyenda, BorderLayout.SOUTH);
+
+        // 6. Tabla con 5 columnas (la 5ª = técnica aplicada)
+        String[] columnas = {"Operador", "Arg 1", "Arg 2", "Resultado", "Técnica de Optimización"};
         javax.swing.table.DefaultTableModel modelo = new javax.swing.table.DefaultTableModel(columnas, 0) {
             @Override public boolean isCellEditable(int r, int c) { return false; }
         };
-
-        for (comp.Cuarteto c : parserCompilado.genC3D.cuadruplosOptimizados) {
-            modelo.addRow(new Object[]{c.operador, c.arg1, c.arg2, c.resultado});
+        for (comp.Cuarteto c : optimizados) {
+            String etiqueta = (c.nota == null || c.nota.isEmpty()) ? "—" : c.nota;
+            modelo.addRow(new Object[]{ c.operador, c.arg1, c.arg2, c.resultado, etiqueta });
         }
-        frameC3D.add(new javax.swing.JScrollPane(new javax.swing.JTable(modelo)));
-        frameC3D.setVisible(true);
+
+        javax.swing.JTable tabla = new javax.swing.JTable(modelo);
+        tabla.setFont(new Font("Monospaced", Font.PLAIN, 12));
+        tabla.getTableHeader().setFont(new Font("SansSerif", Font.BOLD, 12));
+        tabla.setRowHeight(22);
+        tabla.setAutoResizeMode(javax.swing.JTable.AUTO_RESIZE_OFF);
+        tabla.getColumnModel().getColumn(0).setPreferredWidth(90);
+        tabla.getColumnModel().getColumn(1).setPreferredWidth(120);
+        tabla.getColumnModel().getColumn(2).setPreferredWidth(120);
+        tabla.getColumnModel().getColumn(3).setPreferredWidth(120);
+        tabla.getColumnModel().getColumn(4).setPreferredWidth(310);
+
+        // Renderer de color por fila según la técnica aplicada
+        javax.swing.table.TableCellRenderer colorRenderer = new javax.swing.table.DefaultTableCellRenderer() {
+            @Override
+            public java.awt.Component getTableCellRendererComponent(
+                    javax.swing.JTable t, Object val, boolean sel, boolean foc, int row, int col) {
+                java.awt.Component comp = super.getTableCellRendererComponent(t, val, sel, foc, row, col);
+                if (!sel) {
+                    String tecnica = String.valueOf(t.getModel().getValueAt(row, 4));
+                    if (tecnica.equals("—")) {
+                        comp.setBackground(new Color(235, 235, 235));
+                    } else if (tecnica.startsWith("Fuente")) {
+                        comp.setBackground(new Color(220, 160, 255));
+                    } else if (tecnica.startsWith("Simplif")) {
+                        comp.setBackground(new Color(255, 220, 100));
+                    } else if (tecnica.contains("Elim") && !tecnica.contains("Prop") && !tecnica.contains("Pleg")) {
+                        comp.setBackground(new Color(255, 185, 100));
+                    } else if (tecnica.contains("Prop") && !tecnica.contains("Pleg")) {
+                        comp.setBackground(new Color(140, 200, 255));
+                    } else {
+                        // Plegamiento (solo o combinado con Propagación + Elim)
+                        comp.setBackground(new Color(160, 220, 160));
+                    }
+                }
+                return comp;
+            }
+        };
+        for (int i = 0; i < tabla.getColumnCount(); i++) {
+            tabla.getColumnModel().getColumn(i).setCellRenderer(colorRenderer);
+        }
+
+        frame.add(new javax.swing.JScrollPane(tabla), BorderLayout.CENTER);
+        frame.setVisible(true);
+    }
+
+    /** Añade un cuadro de color + etiqueta a un panel de leyenda. */
+    private void agregarItemLeyenda(JPanel panel, Color color, String texto) {
+        JLabel box = new JLabel("   ");
+        box.setOpaque(true);
+        box.setBackground(color);
+        box.setBorder(BorderFactory.createLineBorder(Color.GRAY, 1));
+        panel.add(box);
+        JLabel lbl = new JLabel(" " + texto + "  ");
+        lbl.setFont(new Font("SansSerif", Font.PLAIN, 11));
+        panel.add(lbl);
     }
     
     // --- MÉTODO PARA GENERAR ENSAMBLADOR AUTOMÁTICAMENTE ---

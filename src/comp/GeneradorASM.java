@@ -17,11 +17,18 @@ public class GeneradorASM {
             ArrayList<String> mensajes = new ArrayList<>();
             
             for (Cuarteto c : cuadruplos) {
-                // Si el resultado es una variable o temporal, la guardamos
-                if (esVariable(c.resultado)) variables.add(c.resultado);
+                // Los resultados de LABEL/GOTO/IF_FALSE/IF_TRUE son etiquetas de código,
+                // no variables de datos. Incluirlos en .DATA causaría "duplicate declaration"
+                // en emu8086 porque la misma cadena (ej. "L1") aparecería como DW y como label.
+                boolean esCtrlFlujo = c.operador.equals("LABEL")
+                        || c.operador.equals("GOTO")
+                        || c.operador.equals("IF_FALSE")
+                        || c.operador.equals("IF_TRUE");
+
+                if (!esCtrlFlujo && esVariable(c.resultado)) variables.add(c.resultado);
                 if (esVariable(c.arg1)) variables.add(c.arg1);
                 if (esVariable(c.arg2)) variables.add(c.arg2);
-                
+
                 // Si es un mensaje de texto para la instrucción MOSTRAR
                 if (c.operador.equals("MOSTRAR") && esCadena(c.arg1)) {
                     mensajes.add(c.arg1);
@@ -51,6 +58,11 @@ public class GeneradorASM {
                 msgContador++;
             }
 
+            // Buffer para LEER (INT 21h, AH=0Ah)
+            writer.println("    inBufLen DB 31");
+            writer.println("    inBufCnt DB 0");
+            writer.println("    inBufData DB 31 DUP(0)");
+
             // 4. SEGMENTO DE CÓDIGO
             writer.println("\n.CODE");
             writer.println("INICIO:");
@@ -58,9 +70,12 @@ public class GeneradorASM {
             writer.println("    MOV DS, AX\n");
 
             msgContador = 1;
+            int labelCounter = 0;
 
             // 5. TRADUCCIÓN DE CUÁDRUPLOS
             for (Cuarteto c : cuadruplos) {
+                labelCounter++;
+                String suf = "_" + labelCounter;
                 writer.println("    ; Instrucción: " + c.operador + " " + c.arg1 + " " + c.arg2 + " " + c.resultado);
                 
                 switch (c.operador) {
@@ -96,12 +111,166 @@ public class GeneradorASM {
                         writer.println("    MOV " + c.resultado + ", AX");
                         break;
 
+                    case "%":
+                        writer.println("    MOV AX, " + formatear(c.arg1));
+                        writer.println("    MOV DX, 0");
+                        writer.println("    MOV BX, " + formatear(c.arg2));
+                        writer.println("    DIV BX");
+                        writer.println("    MOV " + c.resultado + ", DX");
+                        break;
+
+                    case "AND":
+                        writer.println("    MOV AX, " + formatear(c.arg1));
+                        writer.println("    CMP AX, 0");
+                        writer.println("    JNE AND_A_TRUE" + suf);
+                        writer.println("    MOV AX, 0");
+                        writer.println("    JMP AND_A_DONE" + suf);
+                        writer.println("AND_A_TRUE" + suf + ":");
+                        writer.println("    MOV AX, 1");
+                        writer.println("AND_A_DONE" + suf + ":");
+                        writer.println("    MOV BX, " + formatear(c.arg2));
+                        writer.println("    CMP BX, 0");
+                        writer.println("    JNE AND_B_TRUE" + suf);
+                        writer.println("    MOV BX, 0");
+                        writer.println("    JMP AND_B_DONE" + suf);
+                        writer.println("AND_B_TRUE" + suf + ":");
+                        writer.println("    MOV BX, 1");
+                        writer.println("AND_B_DONE" + suf + ":");
+                        writer.println("    AND AX, BX");
+                        writer.println("    MOV " + c.resultado + ", AX");
+                        break;
+
+                    case "OR":
+                        writer.println("    MOV AX, " + formatear(c.arg1));
+                        writer.println("    CMP AX, 0");
+                        writer.println("    JNE OR_A_TRUE" + suf);
+                        writer.println("    MOV AX, 0");
+                        writer.println("    JMP OR_A_DONE" + suf);
+                        writer.println("OR_A_TRUE" + suf + ":");
+                        writer.println("    MOV AX, 1");
+                        writer.println("OR_A_DONE" + suf + ":");
+                        writer.println("    MOV BX, " + formatear(c.arg2));
+                        writer.println("    CMP BX, 0");
+                        writer.println("    JNE OR_B_TRUE" + suf);
+                        writer.println("    MOV BX, 0");
+                        writer.println("    JMP OR_B_DONE" + suf);
+                        writer.println("OR_B_TRUE" + suf + ":");
+                        writer.println("    MOV BX, 1");
+                        writer.println("OR_B_DONE" + suf + ":");
+                        writer.println("    OR AX, BX");
+                        writer.println("    MOV " + c.resultado + ", AX");
+                        break;
+
+                    case "NOT":
+                        writer.println("    MOV AX, " + formatear(c.arg1));
+                        writer.println("    CMP AX, 0");
+                        writer.println("    JE NOT_IS_ZERO" + suf);
+                        writer.println("    MOV AX, 0");
+                        writer.println("    JMP NOT_DONE" + suf);
+                        writer.println("NOT_IS_ZERO" + suf + ":");
+                        writer.println("    MOV AX, 1");
+                        writer.println("NOT_DONE" + suf + ":");
+                        writer.println("    MOV " + c.resultado + ", AX");
+                        break;
+
+                    case "==":
+                        writer.println("    MOV AX, " + formatear(c.arg1));
+                        writer.println("    CMP AX, " + formatear(c.arg2));
+                        writer.println("    MOV AX, 0");
+                        writer.println("    JNE CMP_DONE" + suf);
+                        writer.println("    MOV AX, 1");
+                        writer.println("CMP_DONE" + suf + ":");
+                        writer.println("    MOV " + c.resultado + ", AX");
+                        break;
+
+                    case "!=":
+                        writer.println("    MOV AX, " + formatear(c.arg1));
+                        writer.println("    CMP AX, " + formatear(c.arg2));
+                        writer.println("    MOV AX, 0");
+                        writer.println("    JE CMP_DONE" + suf);
+                        writer.println("    MOV AX, 1");
+                        writer.println("CMP_DONE" + suf + ":");
+                        writer.println("    MOV " + c.resultado + ", AX");
+                        break;
+
+                    case "<":
+                        writer.println("    MOV AX, " + formatear(c.arg1));
+                        writer.println("    CMP AX, " + formatear(c.arg2));
+                        writer.println("    MOV AX, 0");
+                        writer.println("    JGE CMP_DONE" + suf);
+                        writer.println("    MOV AX, 1");
+                        writer.println("CMP_DONE" + suf + ":");
+                        writer.println("    MOV " + c.resultado + ", AX");
+                        break;
+
+                    case ">":
+                        writer.println("    MOV AX, " + formatear(c.arg1));
+                        writer.println("    CMP AX, " + formatear(c.arg2));
+                        writer.println("    MOV AX, 0");
+                        writer.println("    JLE CMP_DONE" + suf);
+                        writer.println("    MOV AX, 1");
+                        writer.println("CMP_DONE" + suf + ":");
+                        writer.println("    MOV " + c.resultado + ", AX");
+                        break;
+
+                    case "<=":
+                        writer.println("    MOV AX, " + formatear(c.arg1));
+                        writer.println("    CMP AX, " + formatear(c.arg2));
+                        writer.println("    MOV AX, 0");
+                        writer.println("    JG CMP_DONE" + suf);
+                        writer.println("    MOV AX, 1");
+                        writer.println("CMP_DONE" + suf + ":");
+                        writer.println("    MOV " + c.resultado + ", AX");
+                        break;
+
+                    case ">=":
+                        writer.println("    MOV AX, " + formatear(c.arg1));
+                        writer.println("    CMP AX, " + formatear(c.arg2));
+                        writer.println("    MOV AX, 0");
+                        writer.println("    JL CMP_DONE" + suf);
+                        writer.println("    MOV AX, 1");
+                        writer.println("CMP_DONE" + suf + ":");
+                        writer.println("    MOV " + c.resultado + ", AX");
+                        break;
+
+                    case "LEER":
+                        writer.println("    LEA DX, inBufLen");
+                        writer.println("    MOV AH, 0Ah");
+                        writer.println("    INT 21h");
+                        writer.println("    LEA SI, inBufData");
+                        writer.println("    MOV CL, inBufCnt");
+                        writer.println("    XOR CH, CH");
+                        writer.println("    XOR AX, AX");
+                        writer.println("LEER_LOOP" + suf + ":");
+                        writer.println("    CMP CX, 0");
+                        writer.println("    JE LEER_DONE" + suf);
+                        writer.println("    MOV BX, AX");
+                        writer.println("    SHL AX, 1");
+                        writer.println("    SHL BX, 1");
+                        writer.println("    SHL BX, 1");
+                        writer.println("    SHL BX, 1");
+                        writer.println("    ADD AX, BX");
+                        writer.println("    MOV BL, [SI]");
+                        writer.println("    SUB BL, '0'");
+                        writer.println("    XOR BH, BH");
+                        writer.println("    ADD AX, BX");
+                        writer.println("    INC SI");
+                        writer.println("    DEC CX");
+                        writer.println("    JMP LEER_LOOP" + suf);
+                        writer.println("LEER_DONE" + suf + ":");
+                        writer.println("    MOV " + c.resultado + ", AX");
+                        break;
+
                     case "MOSTRAR":
                         if (esCadena(c.arg1)) {
                             writer.println("    LEA DX, msg" + msgContador);
                             writer.println("    MOV AH, 09h");
                             writer.println("    INT 21h");
                             msgContador++;
+                        } else if (c.arg1 != null && !c.arg1.isEmpty()) {
+                            // Imprimir variable o literal numérico
+                            writer.println("    MOV AX, " + formatear(c.arg1));
+                            writer.println("    CALL IMPRIMIR_NUM");
                         }
                         break;
 
@@ -113,6 +282,32 @@ public class GeneradorASM {
 
                     case "SILENCIO":
                         writer.println("    CALL RUTINA_SILENCIO");
+                        break;
+
+                    // Soporte para futuros cuádruplos de control de flujo
+                    case "LABEL":
+                        writer.println(c.resultado + ":");
+                        break;
+
+                    case "GOTO":
+                        writer.println("    JMP " + c.resultado);
+                        break;
+
+                    case "IF_FALSE":
+                        writer.println("    MOV AX, " + formatear(c.arg1));
+                        writer.println("    CMP AX, 0");
+                        writer.println("    JE " + c.resultado);
+                        break;
+
+                    case "IF_TRUE":
+                        writer.println("    MOV AX, " + formatear(c.arg1));
+                        writer.println("    CMP AX, 0");
+                        writer.println("    JNE " + c.resultado);
+                        break;
+
+                    case "ROMPER":
+                    case "CONTINUAR":
+                        // El parser ya traduce estos a GOTO; este caso es fallback defensivo
                         break;
                 }
                 writer.println(""); // Espacio para que el ASM sea legible
@@ -202,6 +397,59 @@ public class GeneradorASM {
             writer.println("    RET");
             writer.println("RETARDO ENDP\n");
 
+            // --- IMPRIMIR_NUM: imprime AX como decimal con salto de línea ---
+            writer.println("IMPRIMIR_NUM PROC");
+            writer.println("    PUSH AX");
+            writer.println("    PUSH BX");
+            writer.println("    PUSH CX");
+            writer.println("    PUSH DX");
+            writer.println("    MOV BX, 10");
+            writer.println("    MOV CX, 0");
+            writer.println("    TEST AX, AX");
+            writer.println("    JNS IMPNUM_POS");
+            writer.println("    PUSH AX");
+            writer.println("    MOV DL, '-'");
+            writer.println("    MOV AH, 02h");
+            writer.println("    INT 21h");
+            writer.println("    POP AX");
+            writer.println("    NEG AX");
+            writer.println("IMPNUM_POS:");
+            writer.println("    CMP AX, 0");
+            writer.println("    JNZ IMPNUM_EXTRAE");
+            writer.println("    PUSH AX");
+            writer.println("    INC CX");
+            writer.println("    JMP IMPNUM_IMPRIME");
+            writer.println("IMPNUM_EXTRAE:");
+            writer.println("    CMP AX, 0");
+            writer.println("    JZ IMPNUM_IMPRIME");
+            writer.println("    XOR DX, DX");
+            writer.println("    DIV BX");
+            writer.println("    PUSH DX");
+            writer.println("    INC CX");
+            writer.println("    JMP IMPNUM_EXTRAE");
+            writer.println("IMPNUM_IMPRIME:");
+            writer.println("    CMP CX, 0");
+            writer.println("    JZ IMPNUM_FIN");
+            writer.println("    POP DX");
+            writer.println("    ADD DL, '0'");
+            writer.println("    MOV AH, 02h");
+            writer.println("    INT 21h");
+            writer.println("    DEC CX");
+            writer.println("    JMP IMPNUM_IMPRIME");
+            writer.println("IMPNUM_FIN:");
+            writer.println("    MOV DL, 13");
+            writer.println("    MOV AH, 02h");
+            writer.println("    INT 21h");
+            writer.println("    MOV DL, 10");
+            writer.println("    MOV AH, 02h");
+            writer.println("    INT 21h");
+            writer.println("    POP DX");
+            writer.println("    POP CX");
+            writer.println("    POP BX");
+            writer.println("    POP AX");
+            writer.println("    RET");
+            writer.println("IMPRIMIR_NUM ENDP\n");
+
             writer.println("END INICIO");
 
         } catch (IOException e) {
@@ -211,7 +459,21 @@ public class GeneradorASM {
 
     // --- MÉTODOS AUXILIARES ---
     private boolean esVariable(String str) {
-        return str != null && !str.isEmpty() && !esNumero(str) && !esCadena(str) && !str.equals("OR") && !str.equals("AND") && !str.equals("NOT") && !str.equals("==") && !str.equals("!=") && !str.equals(">") && !str.equals("<") && !str.equals(">=") && !str.equals("<=");
+        return str != null
+                && !str.isEmpty()
+                && !esNumero(str)
+                && !esCadena(str)
+                && !esBooleanoLiteral(str)
+                && !esNotaLiteral(str)
+                && !str.equals("OR")
+                && !str.equals("AND")
+                && !str.equals("NOT")
+                && !str.equals("==")
+                && !str.equals("!=")
+                && !str.equals(">")
+                && !str.equals("<")
+                && !str.equals(">=")
+                && !str.equals("<=");
     }
 
     private boolean esNumero(String str) {
@@ -223,6 +485,16 @@ public class GeneradorASM {
     }
     
     private String formatear(String arg) {
+        if (arg == null) return "0";
+
+        if (esBooleanoLiteral(arg)) {
+            return arg.equalsIgnoreCase("true") ? "1" : "0";
+        }
+
+        if (esNotaLiteral(arg)) {
+            return String.valueOf(notaLiteralAFrecuencia(arg));
+        }
+
         if (esNumero(arg)) {
             // Convierte decimales (ej. 50.0) a enteros (50) para que el ensamblador no tire error
             try {
@@ -231,5 +503,70 @@ public class GeneradorASM {
             } catch(Exception e) { return arg; }
         }
         return arg;
+    }
+
+    private boolean esBooleanoLiteral(String str) {
+        return "true".equalsIgnoreCase(str) || "false".equalsIgnoreCase(str);
+    }
+
+    private boolean esNotaLiteral(String str) {
+        return str != null && str.matches("(?i)^(do|re|mi|fa|sol|la|si)([#b]?[1-8]?)$");
+    }
+
+    private int notaLiteralAFrecuencia(String nota) {
+        String n = nota.toLowerCase();
+        int octava = 4;
+
+        char last = n.charAt(n.length() - 1);
+        if (Character.isDigit(last)) {
+            octava = Character.getNumericValue(last);
+            n = n.substring(0, n.length() - 1);
+        }
+
+        int semitono;
+        String resto;
+        if (n.startsWith("sol")) {
+            semitono = 7;
+            resto = n.substring(3);
+            if (resto.contains("#")) semitono = 8;
+            else if (resto.contains("b")) semitono = 6;
+        } else if (n.startsWith("si")) {
+            semitono = 11;
+            resto = n.substring(2);
+            if (resto.contains("#")) { semitono = 0; octava++; }
+            else if (resto.contains("b")) semitono = 10;
+        } else if (n.startsWith("do")) {
+            semitono = 0;
+            resto = n.substring(2);
+            if (resto.contains("#")) semitono = 1;
+            else if (resto.contains("b")) { semitono = 11; octava--; }
+        } else if (n.startsWith("re")) {
+            semitono = 2;
+            resto = n.substring(2);
+            if (resto.contains("#")) semitono = 3;
+            else if (resto.contains("b")) semitono = 1;
+        } else if (n.startsWith("mi")) {
+            semitono = 4;
+            resto = n.substring(2);
+            if (resto.contains("#")) semitono = 5;
+            else if (resto.contains("b")) semitono = 3;
+        } else if (n.startsWith("fa")) {
+            semitono = 5;
+            resto = n.substring(2);
+            if (resto.contains("#")) semitono = 6;
+            else if (resto.contains("b")) semitono = 4;
+        } else if (n.startsWith("la")) {
+            semitono = 9;
+            resto = n.substring(2);
+            if (resto.contains("#")) semitono = 10;
+            else if (resto.contains("b")) semitono = 8;
+        } else {
+            semitono = 0;
+        }
+
+        int midiNote = 12 * (octava + 1) + semitono;
+        double freq = 440.0 * Math.pow(2.0, (midiNote - 69.0) / 12.0);
+        int freqInt = (int) Math.round(freq);
+        return Math.max(40, Math.min(freqInt, 32000));
     }
 }

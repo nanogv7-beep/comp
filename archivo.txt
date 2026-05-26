@@ -1,55 +1,148 @@
-seccion: NocheDePaz {
+seccion: TestCompleto {
 
-    // ============================================================
-    // DEFINICION DE NOTAS
-    // (nombres con prefijo "n" para evitar conflicto con tokens NOTE)
-    // ============================================================
-    definir nSol4 = nota sol octava 4;
-    definir nLa4  = nota la  octava 4;
-    definir nMi4  = nota mi  octava 4;
-    definir nSi4  = nota si  octava 4;
-    definir nDo5  = nota do  octava 5;
-    definir nRe5  = nota re  octava 5;
+    // =============================================
+    // TEST 1: Aritmetica y mostrar variables
+    // =============================================
+    mostrar("=== NOTASCRIPT: TEST COMPLETO ===");
 
-    mostrar("=== Noche de Paz - Silent Night ===");
+    definir a = 10;
+    definir b = 3;
+    definir resultado = a + b;
+    mostrar("a + b = ");
+    mostrar(resultado);
 
-    // === "Noche de paz, noche de amor" ===
-    tocar(nSol4); tocar(nLa4); tocar(nSol4);
-    silencio;
-    tocar(nMi4); tocar(nMi4);
+    resultado = a - b;
+    mostrar("a - b = ");
+    mostrar(resultado);
+
+    resultado = a * b;
+    mostrar("a * b = ");
+    mostrar(resultado);
+
+    resultado = a % b;
+    mostrar("a mod b = ");
+    mostrar(resultado);
+
+    // =============================================
+    // TEST 2: si_ / sino
+    // =============================================
+    mostrar("--- TEST si_/sino ---");
+
+    si_ (a > b) {
+        mostrar("a es mayor que b");
+    } sino {
+        mostrar("a no es mayor que b");
+    }
+
+    si_ (a == 10) {
+        mostrar("a vale exactamente 10");
+    }
+
+    // =============================================
+    // TEST 3: Operadores logicos
+    // =============================================
+    mostrar("--- TEST logica ---");
+
+    si_ (a > 5 && b < 10) {
+        mostrar("AND: ambas condiciones ciertas");
+    }
+
+    si_ (a == 99 || b == 3) {
+        mostrar("OR: al menos una condicion cierta");
+    }
+
+    definir activo = true;
+    si_ (!activo) {
+        mostrar("activo es falso");
+    } sino {
+        mostrar("NOT correcto: activo es verdadero");
+    }
+
+    // =============================================
+    // TEST 4: Notas musicales y tocar
+    // =============================================
+    mostrar("--- TEST notas ---");
+
+    definir n_do  = nota DO  octava 5;
+    definir n_mi  = nota MI  octava 5;
+    definir n_sol = nota SOL octava 5;
+    definir n_do6 = nota DO  octava 6;
+
+    tocar(n_do);
+    tocar(n_mi);
+    tocar(n_sol);
     silencio;
 
-    // === Repeticion del motivo ===
-    tocar(nSol4); tocar(nLa4); tocar(nSol4);
-    silencio;
-    tocar(nMi4); tocar(nMi4);
+    // =============================================
+    // TEST 5: repetir N veces
+    // =============================================
+    mostrar("--- TEST repetir (3 veces) ---");
+
+    repetir 3 veces {
+        tocar(n_do);
+    }
     silencio;
 
-    // === "Todos duermen en derredor" ===
-    tocar(nRe5); tocar(nRe5);
-    silencio;
-    tocar(nSi4);
+    // =============================================
+    // TEST 6: mientras + continuar + romper
+    // =============================================
+    mostrar("--- TEST mientras con continuar y romper ---");
+
+    definir ctr = 1;
+    mientras (ctr <= 6) {
+        si_ (ctr == 3) {
+            ctr = ctr + 1;
+            continuar;
+        }
+        si_ (ctr == 5) {
+            romper;
+        }
+        tocar(n_mi);
+        ctr = ctr + 1;
+    }
+    mostrar("ctr al salir del while:");
+    mostrar(ctr);
+
+    // =============================================
+    // TEST 7: segun / caso / defecto
+    // =============================================
+    mostrar("--- TEST segun ---");
+
+    definir nivel = 2;
+    segun (nivel) {
+        caso 1: {
+            mostrar("Nivel 1 - DO");
+            tocar(n_do);
+        }
+        caso 2: {
+            mostrar("Nivel 2 - MI");
+            tocar(n_mi);
+        }
+        caso 3: {
+            mostrar("Nivel 3 - SOL");
+            tocar(n_sol);
+        }
+        defecto: {
+            mostrar("Nivel desconocido");
+            tocar(n_do6);
+        }
+    }
+
+    // =============================================
+    // TEST 8: Melodia final con bucle
+    // =============================================
+    mostrar("--- MELODIA FINAL (2 repeticiones) ---");
+
+    definir i = 0;
+    mientras (i < 2) {
+        tocar(n_do);
+        tocar(n_mi);
+        tocar(n_sol);
+        tocar(n_do6);
+        i = i + 1;
+    }
     silencio;
 
-    // === "Solo velan en su ardor" ===
-    tocar(nDo5); tocar(nDo5);
-    silencio;
-    tocar(nSol4);
-    silencio;
-
-    // === "La Virgen y el nino" ===
-    tocar(nSi4); tocar(nDo5); tocar(nSi4);
-    silencio;
-    tocar(nSol4);
-    silencio;
-
-    // === "Duermen en paz" (coda) ===
-    tocar(nRe5); tocar(nRe5); tocar(nRe5);
-    silencio;
-    tocar(nSi4); tocar(nDo5);
-    silencio;
-    tocar(nSol4);
-
-    mostrar("Feliz Navidad!");
+    mostrar("=== FIN DEL TEST ===");
 
 } fin
